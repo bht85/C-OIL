@@ -1480,12 +1480,22 @@ const AdminPanel = ({ db, appId }) => {
 };
 
 const ManagementReport = ({ logs, users, db, appId }) => {
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [filters, setFilters] = useState({
     department: 'all',
     userId: 'all',
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
-    endDate: new Date().toISOString().slice(0, 10)
+    endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10)
   });
+
+  // 월 변경 시 시작/종료일 자동 설정
+  const handleMonthChange = (month) => {
+    setSelectedMonth(month);
+    const [year, m] = month.split('-').map(Number);
+    const start = new Date(year, m - 1, 1).toISOString().slice(0, 10);
+    const end = new Date(year, m, 0).toISOString().slice(0, 10);
+    setFilters(prev => ({ ...prev, startDate: start, endDate: end }));
+  };
 
   const [orgUnits, setOrgUnits] = useState(['본사', '연구소', '영업부', '현장']);
 
@@ -1574,19 +1584,31 @@ const ManagementReport = ({ logs, users, db, appId }) => {
               }
             </select>
           </div>
-          <div className="space-y-3 md:col-span-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">조회 기간</label>
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">월별 원클릭 조회</label>
+            <div className="relative">
+              <input 
+                type="month" 
+                className="w-full px-5 py-3.5 rounded-2xl bg-blue-600 text-white font-black outline-none focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer"
+                value={selectedMonth}
+                onChange={e => handleMonthChange(e.target.value)}
+              />
+              <Calendar size={16} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" />
+            </div>
+          </div>
+          <div className="space-y-3 md:col-span-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">상세 기간 조정</label>
             <div className="flex gap-2 items-center">
               <input 
                 type="date" 
-                className="flex-1 px-5 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-50 transition-all"
+                className="flex-1 px-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 text-xs outline-none focus:ring-4 focus:ring-blue-50 transition-all"
                 value={filters.startDate}
                 onChange={e => setFilters({...filters, startDate: e.target.value})}
               />
               <span className="text-slate-300">~</span>
               <input 
                 type="date" 
-                className="flex-1 px-5 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-50 transition-all"
+                className="flex-1 px-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 text-xs outline-none focus:ring-4 focus:ring-blue-50 transition-all"
                 value={filters.endDate}
                 onChange={e => setFilters({...filters, endDate: e.target.value})}
               />
