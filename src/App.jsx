@@ -31,7 +31,9 @@ import {
   Lock,
   User,
   Users,
-  LogOut
+  LogOut,
+  Calendar,
+  LogOut as LogoutIcon
 } from 'lucide-react';
 import { 
   BarChart, 
