@@ -280,15 +280,21 @@ const NavItem = ({ icon, label, active, onClick }) => (
 );
 
 const Dashboard = ({ logs }) => {
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter(log => log.date.startsWith(selectedMonth));
+  }, [logs, selectedMonth]);
+
   const stats = useMemo(() => {
-    const totalDist = logs.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
-    const totalAmount = logs.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-    const gasolineDist = logs.filter(l => l.fuelType === 'gasoline').reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
-    const dieselDist = logs.filter(l => l.fuelType === 'diesel').reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
-    const lpgDist = logs.filter(l => l.fuelType === 'lpg').reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
+    const totalDist = filteredLogs.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
+    const totalAmount = filteredLogs.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+    const gasolineDist = filteredLogs.filter(l => l.fuelType === 'gasoline').reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
+    const dieselDist = filteredLogs.filter(l => l.fuelType === 'diesel').reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
+    const lpgDist = filteredLogs.filter(l => l.fuelType === 'lpg').reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
 
     const userStats = {};
-    logs.forEach(l => {
+    filteredLogs.forEach(l => {
       const name = String(l.userName || "알 수 없음");
       userStats[name] = (userStats[name] || 0) + Number(l.amount || 0);
     });
@@ -300,62 +306,83 @@ const Dashboard = ({ logs }) => {
       { name: 'LPG', value: lpgDist },
     ].filter(d => d.value > 0);
 
-    return { totalDist, totalAmount, barData, pieData };
-  }, [logs]);
+    return { totalDist, totalAmount, count: filteredLogs.length, barData, pieData };
+  }, [filteredLogs]);
 
   return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard title="총 정산 금액" value={`${stats.totalAmount.toLocaleString()}원`} icon={<Calculator className="text-blue-600" />} subtitle="당월 지급 예정 합계" color="bg-blue-600" />
-        <StatCard title="총 누적 거리" value={`${stats.totalDist.toLocaleString()}km`} icon={<Car className="text-emerald-600" />} subtitle="업무용 운행 전체 거리" color="bg-emerald-500" />
-        <StatCard title="기록된 데이터" value={`${logs.length}건`} icon={<History className="text-amber-600" />} subtitle="서버 동기화된 내역" color="bg-amber-500" />
+    <div className="space-y-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div>
+          <h3 className="text-xl font-black text-slate-800">조직 운행 통계</h3>
+          <p className="text-sm font-bold text-slate-400">선택하신 월의 전체 정산 현황입니다.</p>
+        </div>
+        <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl border border-slate-100 shadow-sm">
+          <Calendar size={18} className="text-blue-600" />
+          <input 
+            type="month" 
+            className="bg-transparent font-black text-slate-700 outline-none cursor-pointer text-sm"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col h-[400px]">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <StatCard title="총 정산 금액" value={`${stats.totalAmount.toLocaleString()}원`} subtitle="당월 지급 예정 합계" icon={<Calculator size={24}/>} color="blue" />
+        <StatCard title="총 누적 거리" value={`${stats.totalDist.toFixed(1)}km`} subtitle="업무용 운행 전체 거리" icon={<Navigation size={24}/>} color="emerald" />
+        <StatCard title="기록된 데이터" value={`${stats.count}건`} subtitle="서버 동기화된 내역" icon={<History size={24}/>} color="amber" />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        <div className="xl:col-span-2 bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 min-h-[450px]">
           <div className="flex justify-between items-center mb-10">
             <div>
-              <h3 className="text-xl font-black text-slate-800">사용자별 정산 현황</h3>
-              <p className="text-xs font-medium text-slate-400 mt-1">개인별 누적 유류비 지급액</p>
+              <h4 className="text-lg font-black text-slate-800">사용자별 정산 현황</h4>
+              <p className="text-xs font-bold text-slate-400">개인별 누적 유류비 지급액</p>
             </div>
-            <div className="bg-slate-50 p-2 rounded-lg"><LayoutDashboard size={18} className="text-slate-400" /></div>
+            <div className="p-3 bg-slate-50 rounded-xl text-slate-400"><LayoutDashboard size={20} /></div>
           </div>
-          <div className="flex-1 min-h-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.barData}>
-                <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} fontWeight="700" tickLine={false} axisLine={false} dy={10} />
-                <YAxis stroke="#94a3b8" fontSize={12} fontWeight="700" tickLine={false} axisLine={false} tickFormatter={(val) => `${(val/10000).toFixed(1)}만`} />
-                <Tooltip 
-                  cursor={{fill: '#f8fafc', radius: 10}} 
-                  contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 50px rgba(0,0,0,0.1)', fontWeight: '700' }} 
-                />
-                <Bar dataKey="value" fill="#3b82f6" radius={[10, 10, 10, 10]} barSize={40} animationBegin={200} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="h-[300px] w-full">
+            {stats.barData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stats.barData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 900, fill: '#64748b' }} interval={0} angle={-45} textAnchor="end" dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 900, fill: '#64748b' }} tickFormatter={(value) => `${(value / 10000).toFixed(1)}만`} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontWeight: 900, padding: '12px' }} />
+                  <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 6, 6]} barSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChart message="해당 월의 데이터가 없습니다." />
+            )}
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col h-[400px]">
+        <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100">
           <div className="flex justify-between items-center mb-10">
             <div>
-              <h3 className="text-xl font-black text-slate-800">유종 분포</h3>
-              <p className="text-xs font-medium text-slate-400 mt-1">주행 거리 기준 비중</p>
+              <h4 className="text-lg font-black text-slate-800">유종 분포</h4>
+              <p className="text-xs font-bold text-slate-400">주행 거리 기준 비중</p>
             </div>
-            <div className="bg-slate-50 p-2 rounded-lg"><Fuel size={18} className="text-slate-400" /></div>
+            <div className="p-3 bg-slate-50 rounded-xl text-slate-400"><Fuel size={20} /></div>
           </div>
-          <div className="flex-1 min-h-0 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={stats.pieData} innerRadius={70} outerRadius={100} paddingAngle={8} dataKey="value" stroke="none">
-                  {stats.pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} cornerRadius={5} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend layout="horizontal" align="center" verticalAlign="bottom" iconType="circle" wrapperStyle={{ paddingTop: '20px', fontWeight: 'bold' }} />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="h-[300px] w-full">
+            {stats.pieData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={stats.pieData} innerRadius={70} outerRadius={100} paddingAngle={8} dataKey="value">
+                    {stats.pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} cornerRadius={8} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontWeight: 900 }} />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 900, paddingTop: '20px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChart message="데이터 없음" />
+            )}
           </div>
         </div>
       </div>
@@ -380,6 +407,15 @@ const StatCard = ({ title, value, icon, subtitle }) => (
     </div>
     {/* Subtle background decoration */}
     <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-slate-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+  </div>
+);
+
+const EmptyChart = ({ message }) => (
+  <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+    <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-200">
+      <History size={24} />
+    </div>
+    <p className="text-xs font-bold text-slate-300">{message}</p>
   </div>
 );
 
