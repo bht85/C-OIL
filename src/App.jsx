@@ -1300,8 +1300,24 @@ const AdminPanel = ({ db, appId }) => {
     const unsubscribe = onSnapshot(q, (snap) => {
       setUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
-    return () => unsubscribe();
+
+    // 조직 구성 정보 실시간 동기화
+    const orgRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'orgUnits');
+    const unsubscribeOrg = onSnapshot(orgRef, (snap) => {
+      if (snap.exists()) {
+        setOrgUnits(snap.data().units || ['본사', '연구소', '영업부', '현장']);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeOrg();
+    };
   }, [db, appId]);
+
+  const updateOrgUnitsRemote = async (newUnits) => {
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'orgUnits'), { units: newUnits });
+  };
 
   const updateUser = async (uid, updates) => {
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid), updates);
@@ -1397,7 +1413,10 @@ const AdminPanel = ({ db, appId }) => {
                 {orgUnits.map((unit, idx) => (
                   <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl group">
                     <span className="font-black text-slate-700">{unit}</span>
-                    <button onClick={() => setOrgUnits(orgUnits.filter((_, i) => i !== idx))} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all">
+                    <button 
+                      onClick={() => updateOrgUnitsRemote(orgUnits.filter((_, i) => i !== idx))} 
+                      className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all"
+                    >
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -1410,7 +1429,7 @@ const AdminPanel = ({ db, appId }) => {
                   className="w-full px-5 py-4 rounded-2xl border-2 border-dashed border-slate-100 focus:border-blue-500 outline-none font-bold text-sm transition-all"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && e.target.value) {
-                      setOrgUnits([...orgUnits, e.target.value]);
+                      updateOrgUnitsRemote([...orgUnits, e.target.value]);
                       e.target.value = '';
                     }
                   }}
