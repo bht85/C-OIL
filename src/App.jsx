@@ -370,7 +370,7 @@ const Dashboard = ({ logs }) => {
   }, [filteredLogs, selectedMonth]);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h3 className="text-xl font-black text-slate-800">조직 운행 통계</h3>
@@ -394,15 +394,15 @@ const Dashboard = ({ logs }) => {
       </div>
 
       <div className="grid grid-cols-1 gap-8">
-        <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 min-h-[450px]">
-          <div className="flex justify-between items-center mb-10">
+        <div className="bg-white p-7 rounded-[2rem] shadow-sm border border-slate-100 min-h-[350px]">
+          <div className="flex justify-between items-center mb-6">
             <div>
-              <h4 className="text-base font-black text-slate-800">일자별 KM 트래킹</h4>
-              <p className="text-[10px] font-bold text-slate-400">당월 업무용 운행 거리 일일 변동 추이</p>
+              <h4 className="text-sm font-black text-slate-800">일자별 KM 트래킹</h4>
+              <p className="text-[9px] font-bold text-slate-400">당월 업무용 운행 거리 일일 변동 추이</p>
             </div>
-            <div className="p-3 bg-slate-50 rounded-xl text-slate-400"><Navigation size={20} /></div>
+            <div className="p-2.5 bg-slate-50 rounded-xl text-slate-400"><Navigation size={18} /></div>
           </div>
-          <div className="h-[300px] w-full">
+          <div className="h-[220px] w-full">
             {stats.dailyData.some(d => d.distance > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={stats.dailyData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
@@ -433,22 +433,22 @@ const Dashboard = ({ logs }) => {
 };
 
 const StatCard = ({ title, value, icon, subtitle }) => (
-  <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col relative overflow-hidden group hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300">
+  <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col relative overflow-hidden group hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300">
     <div className="flex items-start justify-between z-10">
       <div>
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{title}</p>
-        <h4 className="text-2xl font-black text-slate-900 tracking-tight">{value}</h4>
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{title}</p>
+        <h4 className="text-xl font-black text-slate-900 tracking-tight">{value}</h4>
       </div>
-      <div className="p-4 bg-slate-50 rounded-2xl group-hover:scale-110 group-hover:bg-slate-100 transition-all duration-300">
-        {icon}
+      <div className="p-3 bg-slate-50 rounded-2xl group-hover:scale-110 group-hover:bg-slate-100 transition-all duration-300">
+        {React.cloneElement(icon, { size: 18 })}
       </div>
     </div>
-    <div className="mt-6 flex items-center gap-2 z-10">
-      <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-      <p className="text-xs font-bold text-slate-500">{subtitle}</p>
+    <div className="mt-4 flex items-center gap-2 z-10">
+      <div className="w-1 h-1 rounded-full bg-blue-500"></div>
+      <p className="text-[10px] font-bold text-slate-400">{subtitle}</p>
     </div>
     {/* Subtle background decoration */}
-    <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-slate-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+    <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-slate-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
   </div>
 );
 
@@ -1053,7 +1053,7 @@ const MyPage = ({ profile, onUpdate }) => {
         </div>
       </div>
 
-      <div className="space-y-12">
+      <div className="space-y-8">
         <section className="space-y-6">
           <div className="flex items-center gap-2 px-1">
             <MapPin size={18} className="text-blue-500" />
