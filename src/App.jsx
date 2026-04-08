@@ -95,6 +95,17 @@ const App = () => {
     depreciation: 10
   });
   const [statusMessage, setStatusMessage] = useState(null);
+  const [allUsers, setAllUsers] = useState([]);
+
+  useEffect(() => {
+    if (!user || profile?.role !== 'admin') return;
+    
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setAllUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubscribe();
+  }, [user, profile?.role]);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
@@ -251,7 +262,7 @@ const App = () => {
           <div>
             <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest block mb-1 tracking-widest">SYSTEM › {view.toUpperCase()}</span>
             <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
-              {view === 'dashboard' ? '대시보드' : view === 'log' ? '신규 내역' : view === 'history' ? '정산 내역' : view === 'settings' ? '기준 설정' : view === 'admin' ? '인사 관리' : '개인 설정'}
+              {view === 'dashboard' ? '대시보드' : view === 'log' ? '신규 내역' : view === 'history' ? '정산 내역' : view === 'reports' ? '운행 리포트' : view === 'settings' ? '기준 설정' : view === 'admin' ? '인사 관리' : '개인 설정'}
             </h1>
           </div>
           <button className="flex items-center gap-2 bg-white px-6 py-4 rounded-2xl border border-slate-100 text-slate-500 font-bold shadow-sm hover:shadow-md transition-all active:scale-95">
@@ -267,6 +278,7 @@ const App = () => {
           {view === 'dashboard' && <Dashboard logs={logs} />}
           {view === 'log' && <LogEntryForm fuelRates={fuelRates} profile={profile} onSave={saveLog} />}
           {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} />}
+          {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} />}
           {view === 'settings' && <SettingsPanel fuelRates={fuelRates} onUpdate={updateSettings} db={db} appId={appId} />}
           {view === 'admin' && <AdminPanel db={db} appId={appId} />}
           {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} />}
@@ -1222,6 +1234,7 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
       {isAdmin && (
         <>
           <div className={`hidden lg:block h-px bg-slate-50 my-2 ${isCollapsed ? 'mx-2' : 'mx-4'}`}></div>
+          <NavItem isCollapsed={isCollapsed} icon={<FileText size={20}/>} label="운행 리포트" active={currentView === 'reports'} onClick={() => onNavigate('reports')} />
           <NavItem isCollapsed={isCollapsed} icon={<Settings size={20}/>} label="단가 설정" active={currentView === 'settings'} onClick={() => onNavigate('settings')} />
           <NavItem isCollapsed={isCollapsed} icon={<Users size={20}/>} label="인사 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} />
         </>
@@ -1461,6 +1474,190 @@ const AdminPanel = ({ db, appId }) => {
               </div>
            </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const ManagementReport = ({ logs, users, db, appId }) => {
+  const [filters, setFilters] = useState({
+    department: 'all',
+    userId: 'all',
+    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
+    endDate: new Date().toISOString().slice(0, 10)
+  });
+
+  const [orgUnits, setOrgUnits] = useState(['본사', '연구소', '영업부', '현장']);
+
+  useEffect(() => {
+    const orgRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'orgUnits');
+    const unsubscribe = onSnapshot(orgRef, (snap) => {
+      if (snap.exists()) setOrgUnits(snap.data().units || []);
+    });
+    return () => unsubscribe();
+  }, [db, appId]);
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter(log => {
+      const user = users.find(u => u.uid === log.userId);
+      const logDept = user?.department || '미지정';
+      
+      const matchDept = filters.department === 'all' || logDept === filters.department;
+      const matchUser = filters.userId === 'all' || log.userId === filters.userId;
+      const matchStart = !filters.startDate || log.date >= filters.startDate;
+      const matchEnd = !filters.endDate || log.date <= filters.endDate;
+      
+      return matchDept && matchUser && matchStart && matchEnd;
+    });
+  }, [logs, users, filters]);
+
+  const stats = useMemo(() => {
+    const totalDist = filteredLogs.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
+    const totalAmount = filteredLogs.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+    return { totalDist, totalAmount, count: filteredLogs.length };
+  }, [filteredLogs]);
+
+  const exportCSV = () => {
+    const headers = ['날짜', '성명', '부서', '운행구간', '목적', '거리(km)', '유종', '금액(원)'];
+    const rows = filteredLogs.map(log => {
+      const user = users.find(u => u.uid === log.userId);
+      return [
+        log.date,
+        log.userName,
+        user?.department || '미지정',
+        log.routeSummary?.replaceAll(' → ', ' > ') || `${log.departure} > ${log.destination}`,
+        log.purpose,
+        log.distance,
+        log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG',
+        log.amount
+      ];
+    });
+
+    const csvContent = "\uFEFF" + [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `유류비_정산리포트_${filters.startDate}_${filters.endDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="space-y-10">
+      <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">부서별 필터</label>
+            <select 
+              className="w-full px-5 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-50 transition-all appearance-none"
+              value={filters.department}
+              onChange={e => setFilters({...filters, department: e.target.value, userId: 'all'})}
+            >
+              <option value="all">전체 부서</option>
+              {orgUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+              <option value="미지정">미지정</option>
+            </select>
+          </div>
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">인원 검색</label>
+            <select 
+              className="w-full px-5 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-50 transition-all appearance-none"
+              value={filters.userId}
+              onChange={e => setFilters({...filters, userId: e.target.value})}
+            >
+              <option value="all">전체 인원</option>
+              {users
+                .filter(u => filters.department === 'all' || u.department === filters.department)
+                .map(u => <option key={u.uid} value={u.uid}>{u.userName}</option>)
+              }
+            </select>
+          </div>
+          <div className="space-y-3 md:col-span-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">조회 기간</label>
+            <div className="flex gap-2 items-center">
+              <input 
+                type="date" 
+                className="flex-1 px-5 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-50 transition-all"
+                value={filters.startDate}
+                onChange={e => setFilters({...filters, startDate: e.target.value})}
+              />
+              <span className="text-slate-300">~</span>
+              <input 
+                type="date" 
+                className="flex-1 px-5 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-50 transition-all"
+                value={filters.endDate}
+                onChange={e => setFilters({...filters, endDate: e.target.value})}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <StatCard title="검색 정산 합계" value={`${stats.totalAmount.toLocaleString()}원`} subtitle="필터링된 총 정산액" icon={<Calculator size={24}/>} />
+        <StatCard title="검색 총 거리" value={`${stats.totalDist.toFixed(1)}km`} subtitle="필터링된 총 운행거리" icon={<Navigation size={24}/>} />
+        <div className="bg-slate-900 p-8 rounded-[2rem] shadow-xl flex flex-col justify-between group cursor-pointer active:scale-95 transition-all" onClick={exportCSV}>
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Report Export</p>
+              <h4 className="text-3xl font-black text-white">Excel 다운로드</h4>
+            </div>
+            <div className="p-4 bg-white/10 rounded-2xl text-white group-hover:rotate-12 transition-transform">
+              <Download size={24} />
+            </div>
+          </div>
+          <p className="text-xs font-bold text-slate-400 mt-6 flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+            CSV 데이터 형식으로 정산 데이터 저장
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+        <table className="w-full text-left table-fixed">
+          <thead className="bg-slate-50 border-b border-slate-100">
+            <tr>
+              <th className="w-24 px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">날짜</th>
+              <th className="w-40 px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">사용자 / 부서</th>
+              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">경유 정보</th>
+              <th className="w-32 px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">거리/금액</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {filteredLogs.length === 0 ? (
+              <tr>
+                <td colSpan="4" className="px-8 py-20 text-center font-bold text-slate-400 italic">조회된 내역이 없습니다.</td>
+              </tr>
+            ) : (
+              filteredLogs.map(log => {
+                const user = users.find(u => u.uid === log.userId);
+                return (
+                  <tr key={log.id} className="hover:bg-slate-50/50 transition-all">
+                    <td className="px-8 py-6 align-top">
+                      <div className="font-black text-sm text-slate-900">{log.date.slice(5)}</div>
+                    </td>
+                    <td className="px-8 py-6 align-top">
+                      <div className="font-black text-slate-800">{log.userName}</div>
+                      <div className="text-[10px] font-black text-blue-500 mt-1 uppercase">{user?.department || '미지정'}</div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="text-xs font-bold text-slate-600 leading-relaxed truncate">
+                        {log.routeSummary || `${log.departure} → ${log.destination}`}
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-400 mt-2 bg-slate-50 px-2 py-1 rounded-lg inline-block">{log.purpose}</div>
+                    </td>
+                    <td className="px-8 py-6 text-right align-top">
+                      <div className="font-black text-slate-900">{log.distance}km</div>
+                      <div className="font-black text-blue-600 text-sm mt-1">{Number(log.amount || 0).toLocaleString()}원</div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
