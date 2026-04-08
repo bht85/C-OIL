@@ -477,9 +477,6 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
     new window.daum.Postcode({
       oncomplete: function(data) {
         const fullAddress = data.address;
-        const bname = data.bname || ""; 
-        const buildingName = data.buildingName || ""; 
-        const autoAlias = buildingName || bname; 
 
         // 카카오 지오코더로 실제 좌표 검색
         if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
@@ -494,25 +491,24 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
               newWaypoints[index] = { 
                 ...newWaypoints[index], 
                 address: fullAddress,
-                alias: newWaypoints[index].alias || autoAlias,
                 lat: realLat,
                 lng: realLng
               };
               setFormData({ ...formData, waypoints: newWaypoints });
             } else {
               // 검색 실패 시 기존 로직 유지 (폴백)
-              applyFallbackCoords(index, fullAddress, autoAlias);
+              applyFallbackCoords(index, fullAddress);
             }
           });
         } else {
           // SDK 미로드 시 기존 로직 유지 (폴백)
-          applyFallbackCoords(index, fullAddress, autoAlias);
+          applyFallbackCoords(index, fullAddress);
         }
       }
     }).open();
   };
 
-  const applyFallbackCoords = (index, fullAddress, autoAlias) => {
+  const applyFallbackCoords = (index, fullAddress) => {
     const seed = fullAddress.length;
     const mockLat = 37.5 + (seed % 100) / 500;
     const mockLng = 127.0 + (seed % 100) / 500;
@@ -521,7 +517,6 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
     newWaypoints[index] = { 
       ...newWaypoints[index], 
       address: fullAddress,
-      alias: newWaypoints[index].alias || autoAlias,
       lat: mockLat,
       lng: mockLng
     };
