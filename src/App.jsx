@@ -1570,8 +1570,18 @@ const ManagementReport = ({ logs, users, db, appId }) => {
   };
 
   return (
-    <div className="space-y-10">
-      <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+    <div className="space-y-8">
+      <div className="bg-white p-7 rounded-[2rem] shadow-sm border border-slate-100">
+        <div className="flex justify-between items-center mb-6">
+          <h4 className="text-sm font-black text-slate-800">정산 데이터 필터</h4>
+          <button 
+            onClick={exportCSV}
+            className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-xs hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-200"
+          >
+            <Download size={14} />
+            Excel 다운로드
+          </button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
           <div className="space-y-3">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">부서별 필터</label>
@@ -1632,24 +1642,9 @@ const ManagementReport = ({ logs, users, db, appId }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <StatCard title="검색 정산 합계" value={`${stats.totalAmount.toLocaleString()}원`} subtitle="필터링된 총 정산액" icon={<Calculator size={24}/>} />
         <StatCard title="검색 총 거리" value={`${stats.totalDist.toFixed(1)}km`} subtitle="필터링된 총 운행거리" icon={<Navigation size={24}/>} />
-        <div className="bg-slate-900 p-8 rounded-[2rem] shadow-xl flex flex-col justify-between group cursor-pointer active:scale-95 transition-all" onClick={exportCSV}>
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Report Export</p>
-              <h4 className="text-3xl font-black text-white">Excel 다운로드</h4>
-            </div>
-            <div className="p-4 bg-white/10 rounded-2xl text-white group-hover:rotate-12 transition-transform">
-              <Download size={24} />
-            </div>
-          </div>
-          <p className="text-xs font-bold text-slate-400 mt-6 flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-            CSV 데이터 형식으로 정산 데이터 저장
-          </p>
-        </div>
       </div>
 
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
