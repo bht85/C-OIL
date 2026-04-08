@@ -1,8 +1,16 @@
 /* eslint-disable react/prop-types */
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, query } from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  onAuthStateChanged, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  updateProfile as updateAuthProfile
+} from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, query, getDoc, updateDoc, orderBy } from 'firebase/firestore';
 import { 
   LayoutDashboard, 
   PlusCircle, 
@@ -39,7 +47,7 @@ import {
 const getSafeGlobal = (key, fallback) => {
   try {
     return typeof window !== 'undefined' && window[key] ? window[key] : fallback;
-  } catch (e) {
+  } catch {
     return fallback;
   }
 };
@@ -58,280 +66,191 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = getSafeGlobal('__app_id', 'vehicle-fuel-tracker');
-const initialToken = getSafeGlobal('__initial_auth_token', null);
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 const App = () => {
   const [user, setUser] = useState(null);
-  const [view, setView] = useState('dashboard'); // 'dashboard', 'log', 'history', 'settings', 'profile'
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('dashboard');
   const [logs, setLogs] = useState([]);
-  const [profile, setProfile] = useState({
-    homeAddress: '',
-    homeAlias: '우리집',
-    homeLat: 37.5665,
-    homeLng: 126.9780,
-    vehicleName: '',
-    fuelType: 'gasoline',
-    savedLocations: [] // [{id, name, address, lat, lng}]
-  });
   const [fuelRates, setFuelRates] = useState({
     gasoline: { unitPrice: 229.55, avgPrice: 1836.41 },
     diesel: { unitPrice: 228.62, avgPrice: 1828.92 },
     lpg: { unitPrice: 101.17, avgPrice: 1011.67 },
     depreciation: 10
   });
-  const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState(null);
 
-  // Authentication
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (initialToken) {
-          await signInWithCustomToken(auth, initialToken);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.error("Auth error:", err);
-        // Fallback for development if Firebase fails
-        if (!rawConfig) {
-          setUser({ uid: 'dev-user', isAnonymous: true });
-          setLoading(false);
-        }
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
       if (u) {
         setUser(u);
-        setLoading(false);
+        const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', u.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (userDoc.exists()) {
+          setProfile(userDoc.data());
+        } else {
+          // 마스터 관리자 이메일 체크
+          const adminEmails = ['esc913@composecoffee.co.kr', 'choihy@composecoffee.co.kr'];
+          const isMasterAdmin = adminEmails.includes(u.email);
+
+          const newProfile = {
+            uid: u.uid,
+            email: u.email,
+            userName: u.displayName || '신규 사용자',
+            role: isMasterAdmin ? 'admin' : 'staff',
+            status: isMasterAdmin ? 'approved' : 'pending',
+            department: isMasterAdmin ? '인사팀' : '미지정',
+            vehicleName: '',
+            fuelType: 'gasoline',
+            homeAddress: '',
+            homeAlias: '우리집',
+            savedLocations: []
+          };
+          await setDoc(userDocRef, newProfile);
+          setProfile(newProfile);
+        }
+      } else {
+        setUser(null);
+        setProfile(null);
       }
+      setLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => unsubscribeAuth();
   }, []);
 
-  // Data Sync
   useEffect(() => {
-    if (!user || user.uid === 'dev-user') {
-      if (user?.uid === 'dev-user' && logs.length === 0) {
-        // Mock data for dev
-        setLogs([
-          { id: '1', date: '2026-03-01', userName: '홍길동', departure: '본사', destination: '현장A', purpose: '업무미팅', distance: 15, fuelType: 'gasoline', amount: 3443 },
-          { id: '2', date: '2026-03-02', userName: '홍길동', departure: '현장A', destination: '본사', purpose: '복귀', distance: 15, fuelType: 'gasoline', amount: 3443 }
-        ]);
-      }
-      return;
+    if (!user || (profile?.status !== 'approved' && profile?.role !== 'admin')) return;
+    
+    const tripMonth = new Date().toISOString().slice(0, 7);
+    const fetchRates = async () => {
+      const rateRef = doc(db, 'artifacts', appId, 'public', 'data', 'fuelRates', tripMonth);
+      const snap = await getDoc(rateRef);
+      if (snap.exists()) setFuelRates(snap.data());
     };
+    fetchRates();
 
-    const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config');
-    const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.gasoline && data.diesel && data.lpg) setFuelRates(data);
-      }
-    });
-
-    // Logs Listener
-    const logsQuery = query(collection(db, 'logs'));
+    const logsQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), orderBy('date', 'desc'));
     const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
-      const logsData = [];
-      snapshot.forEach((doc) => {
-        logsData.push({ id: doc.id, ...doc.data() });
-      });
-      setLogs(logsData.sort((a, b) => new Date(b.date) - new Date(a.date)));
+      const logsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(log => profile?.role === 'admin' || log.userId === user.uid);
+      setLogs(logsData);
     });
 
-    // Profile Data (User Private) - 경로 단순화
-    const profileDoc = doc(db, 'profiles', user.uid);
-    const unsubscribeProfile = onSnapshot(profileDoc, (docSnap) => {
-      const data = docSnap.data();
-      // dev-user이고 데이터가 없거나 주소가 비어있으면 강제로 테스트용 데이터 주입
-      if (user.uid === 'dev-user' && (!docSnap.exists() || !data?.homeAddress)) {
-        const testProfile = {
-          homeAddress: '경기 의왕시 장안중앙로 23',
-          homeAlias: '우리집',
-          homeLat: 37.3385,
-          homeLng: 126.9634,
-          vehicleName: '쏘렌토',
-          fuelType: 'gasoline',
-          savedLocations: [
-            { id: 1712543000000, name: '회사', address: '서울 성동구 성수일로12길 26', lat: 37.5446, lng: 127.0567 }
-          ]
-        };
-        setProfile(testProfile);
-        setDoc(profileDoc, testProfile);
-      } else if (docSnap.exists()) {
-        setProfile(data);
-      }
-    });
-
-    return () => {
-      unsubscribeSettings();
-      unsubscribeLogs();
-      unsubscribeProfile();
-    };
-  }, [user]);
+    return () => unsubscribeLogs();
+  }, [user, profile?.role, profile?.status]);
 
   const showStatus = (msg, type = 'success') => {
     setStatusMessage({ msg: String(msg), type });
     setTimeout(() => setStatusMessage(null), 3000);
   };
 
+  const login = async (email, password) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      showStatus("로그인 성공!");
+    } catch { showStatus("로그인 실패", 'error'); }
+  };
+
+  const signup = async (email, password, userName) => {
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      await updateAuthProfile(cred.user, { displayName: userName });
+      showStatus("가입 신청 완료! 승인 대기 중입니다.");
+    } catch { showStatus("회원가입 실패", 'error'); }
+  };
+
+  const logout = () => signOut(auth).then(() => setView('dashboard'));
+
   const saveLog = async (logData) => {
-    if (!user) return;
-    if (user.uid === 'dev-user') {
-       setLogs([{ id: Date.now().toString(), ...logData, userName: '개발자' }, ...logs]);
-       showStatus("운행 내역이 저장되었습니다 (개발 모드).");
-       setView('history');
-       return;
-    }
     try {
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), {
         ...logData,
         userId: user.uid,
-        userName: user.isAnonymous ? `사용자(${user.uid.slice(0,4)})` : (user.displayName || user.email || "알 수 없음"),
+        userName: profile?.userName || user.email,
         createdAt: new Date().toISOString()
       });
-      showStatus("운행 내역이 저장되었습니다.");
+      showStatus("저장되었습니다.");
       setView('history');
-    } catch (e) {
-      showStatus("저장 중 오류가 발생했습니다.", 'error');
-    }
+    } catch { showStatus("저장 실패", 'error'); }
   };
 
   const deleteLog = async (id) => {
-    if (user?.uid === 'dev-user') {
-      setLogs(logs.filter(l => l.id !== id));
-      showStatus("내역이 삭제되었습니다.");
-      return;
-    }
     try {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', id));
-      showStatus("내역이 삭제되었습니다.");
-    } catch (e) {
-      showStatus("삭제 중 오류가 발생했습니다.", 'error');
-    }
-  };
-
-  const updateSettings = async (newRates) => {
-    if (user?.uid === 'dev-user') {
-      setFuelRates(newRates);
-      showStatus("단가 설정이 업데이트되었습니다 (개발 모드).");
-      return;
-    }
-    try {
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), newRates);
-      showStatus("단가 설정이 업데이트되었습니다.");
-    } catch (e) {
-      showStatus("설정 저장 실패", 'error');
-    }
+      showStatus("삭제되었습니다.");
+    } catch { showStatus("삭제 실패", 'error'); }
   };
 
   const updateProfile = async (newProfile) => {
-    if (user?.uid === 'dev-user') {
-      setProfile(newProfile);
-      showStatus("프로필이 업데이트되었습니다 (개발 모드).");
-      return;
-    }
     try {
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), newProfile);
-      showStatus("프로필 정보가 저장되었습니다.");
-    } catch (e) {
-      showStatus("프로필 저장 실패", 'error');
-    }
+      setProfile(newProfile);
+      showStatus("저장되었습니다.");
+    } catch { showStatus("저장 실패", 'error'); }
   };
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-screen bg-slate-50">
-      <div className="flex flex-col items-center gap-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <p className="text-slate-500 font-medium animate-pulse">시스템을 불러오는 중...</p>
+  const updateSettings = async (rates, month) => {
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'fuelRates', month), rates);
+      setFuelRates(rates);
+      showStatus("단가 설정 저장됨");
+    } catch { showStatus("저장 실패", 'error'); }
+  };
+
+  if (loading) return <div className="h-screen flex items-center justify-center font-black text-slate-300">SYSTEM LOADING...</div>;
+  if (!user) return <AuthScreen onLogin={login} onSignup={signup} />;
+  
+  // 마스터 관리자 이메일 체크
+  const adminEmails = ['esc913@composecoffee.co.kr', 'choihy@composecoffee.co.kr'];
+  const isAdmin = profile?.role === 'admin' || adminEmails.includes(user?.email); 
+
+  if (!isAdmin && profile?.status === 'pending') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center">
+        <div className="bg-white p-12 rounded-[3.5rem] shadow-xl max-w-md">
+          <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-3xl flex items-center justify-center mx-auto mb-6"><AlertCircle size={40} /></div>
+          <h2 className="text-2xl font-black text-slate-800 mb-4">승인 대기 중</h2>
+          <p className="text-slate-500 font-bold mb-8">인사팀의 승인이 아직 완료되지 않았습니다.</p>
+          <button onClick={logout} className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-black">로그아웃</button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
-      {/* Sidebar */}
-      <nav className="w-full md:w-72 bg-white border-r border-slate-200 flex flex-col p-6 z-10">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg shadow-blue-200">
-            <Car size={24} strokeWidth={2.5} />
-          </div>
+    <div className="flex flex-col lg:flex-row min-h-screen bg-slate-50 font-['Outfit']">
+      <Sidebar currentView={view} onNavigate={setView} onLogout={logout} isAdmin={isAdmin} userProfile={profile} />
+      <div className="flex-1 lg:ml-80 p-6 lg:p-12">
+        <header className="flex justify-between items-center mb-12">
           <div>
-            <h1 className="text-xl font-black tracking-tight text-slate-800">유류대 마스터</h1>
-            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Enterprise Edition</p>
+            <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest block mb-1 tracking-widest">SYSTEM › {view.toUpperCase()}</span>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
+              {view === 'dashboard' ? '대시보드' : view === 'log' ? '신규 내역' : view === 'history' ? '정산 내역' : view === 'settings' ? '기준 설정' : view === 'admin' ? '인사 관리' : '개인 설정'}
+            </h1>
           </div>
-        </div>
-
-        <div className="space-y-1.5 flex-1">
-          <NavItem icon={<LayoutDashboard size={20}/>} label="대시보드" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
-          <NavItem icon={<PlusCircle size={20}/>} label="신규 내역 입력" active={view === 'log'} onClick={() => setView('log')} />
-          <NavItem icon={<History size={20}/>} label="운행 내역 관리" active={view === 'history'} onClick={() => setView('history')} />
-          <NavItem icon={<Settings size={20}/>} label="시스템 단가 설정" active={view === 'settings'} onClick={() => setView('settings')} />
-          <NavItem icon={<UserCircle size={20}/>} label="마이페이지" active={view === 'profile'} onClick={() => setView('profile')} />
-        </div>
-
-        <div className="mt-auto pt-6 border-t border-slate-100">
-          <div className="bg-slate-50 rounded-2xl p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-8 h-8 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-600 font-bold text-xs">
-                {user?.uid?.slice(0,1).toUpperCase() || 'U'}
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-700 truncate">{user?.isAnonymous ? '익명 사용자' : (user?.email || '사용자')}</p>
-                <p className="text-[10px] text-slate-400 font-mono truncate">{user?.uid}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-slate-50 relative">
-        <div className="max-w-7xl mx-auto p-6 md:p-10 space-y-8">
-          <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <nav className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                <span>System</span>
-                <ChevronRight size={10} />
-                <span className="text-blue-500">{view === 'dashboard' ? 'Overview' : view === 'log' ? 'Entry' : view === 'history' ? 'Records' : 'Settings'}</span>
-              </nav>
-              <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-                {view === 'dashboard' ? '운영 통계 대시보드' : view === 'log' ? '신규 운행 내역 등록' : view === 'history' ? '전체 운행 이력' : '유류비 산정 기준 설정'}
-              </h2>
-            </div>
-            
-            <div className="flex gap-3">
-              <button 
-                onClick={() => window.print()}
-                className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-white hover:shadow-md transition-all active:scale-95"
-              >
-                <Download size={16} /> 레포트 출력
-              </button>
-            </div>
-          </header>
-
+          <button className="flex items-center gap-2 bg-white px-6 py-4 rounded-2xl border border-slate-100 text-slate-500 font-bold shadow-sm hover:shadow-md transition-all active:scale-95">
+            <Download size={20} /> <span className="hidden md:inline">레포트 출력</span>
+          </button>
+        </header>
+        <main className="max-w-7xl">
           {statusMessage && (
-            <div className={`fixed top-6 right-6 z-50 p-4 rounded-2xl flex items-center gap-3 shadow-2xl border animate-fade-in ${statusMessage.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-green-50 text-green-700 border-green-100'}`}>
-              <div className={`p-1.5 rounded-lg ${statusMessage.type === 'error' ? 'bg-red-100' : 'bg-green-100'}`}>
-                {statusMessage.type === 'error' ? <AlertCircle size={18}/> : <CheckCircle2 size={18}/>}
-              </div>
-              <span className="font-bold text-sm pr-2">{statusMessage.msg}</span>
+            <div className={`fixed top-8 right-8 z-50 p-4 rounded-2xl shadow-2xl border animate-bounce ${statusMessage.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-green-50 text-green-700 border-green-100'}`}>
+              <span className="font-black px-4">{statusMessage.msg}</span>
             </div>
           )}
-
-          <div className="animate-fade-in">
-            {view === 'dashboard' && <Dashboard logs={logs} />}
-            {view === 'log' && <LogEntryForm fuelRates={fuelRates} profile={profile} onSave={saveLog} />}
-            {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} />}
-            {view === 'settings' && <SettingsPanel fuelRates={fuelRates} onUpdate={updateSettings} />}
-            {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} />}
-          </div>
-        </div>
-      </main>
+          {view === 'dashboard' && <Dashboard logs={logs} />}
+          {view === 'log' && <LogEntryForm fuelRates={fuelRates} profile={profile} onSave={saveLog} />}
+          {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} />}
+          {view === 'settings' && <SettingsPanel fuelRates={fuelRates} onUpdate={updateSettings} db={db} appId={appId} />}
+          {view === 'admin' && <AdminPanel db={db} appId={appId} />}
+          {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} />}
+        </main>
+      </div>
     </div>
   );
 };
@@ -912,12 +831,32 @@ const HistoryTable = ({ logs, onDelete }) => {
   );
 };
 
-const SettingsPanel = ({ fuelRates, onUpdate }) => {
+const SettingsPanel = ({ fuelRates, onUpdate, db, appId }) => {
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [localRates, setLocalRates] = useState(fuelRates);
+  const [isLoading, setIsLoading] = useState(false);
 
+  // Fetch rates when selected month changes
   useEffect(() => {
-    setLocalRates(fuelRates);
-  }, [fuelRates]);
+    const fetchSelectedMonthRates = async () => {
+      setIsLoading(true);
+      try {
+        const rateRef = doc(db, 'artifacts', appId, 'public', 'data', 'fuelRates', selectedMonth);
+        const snap = await getDoc(rateRef);
+        if (snap.exists()) {
+          setLocalRates(snap.data());
+        } else {
+          // If no data for selected month, use current app fuelRates as base
+          setLocalRates(fuelRates);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchSelectedMonthRates();
+  }, [selectedMonth, db, appId]);
 
   const handleChange = (fuel, field, value) => {
     setLocalRates({
@@ -928,67 +867,87 @@ const SettingsPanel = ({ fuelRates, onUpdate }) => {
 
   return (
     <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+        <div>
+          <h3 className="text-2xl font-black text-slate-800">유류비 산정 기준 관리</h3>
+          <p className="text-sm font-bold text-slate-400">인사팀 전용: 월별 유류비 지급 기준을 설정합니다.</p>
+        </div>
+        <div className="flex items-center gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+          <Calendar size={20} className="text-blue-600" />
+          <input 
+            type="month" 
+            className="bg-transparent font-black text-slate-700 outline-none cursor-pointer"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+          />
+        </div>
+      </div>
+
       <div className="mb-12 p-6 bg-blue-50/50 border border-blue-100 rounded-[1.5rem] flex items-start gap-4">
         <div className="p-3 bg-blue-600 rounded-2xl text-white">
           <AlertCircle size={24} />
         </div>
         <div>
-          <h4 className="text-blue-900 font-black mb-1">단가 산정 가이드</h4>
+          <h4 className="text-blue-900 font-black mb-1">{selectedMonth.split('-')[1]}월 단가 산정 가이드</h4>
           <p className="text-sm text-blue-700 leading-relaxed font-bold">
-            오피넷(Opinet) 전월 평균 가격을 기준으로 km당 단가를 설정하세요.<br/>
-            수정된 단가는 신규 입력하는 내역부터 즉시 적용됩니다.
+            오피넷(Opinet) 전월 평균 가격을 기준으로 {selectedMonth}월 km당 단가를 설정하세요.<br/>
+            저장된 데이터는 해당 월의 운행 내역 정산 시 자동으로 차등 적용됩니다.
           </p>
         </div>
       </div>
 
-      <div className="space-y-12">
-        {['gasoline', 'diesel', 'lpg'].map((fuel) => (
-          <div key={fuel} className="grid grid-cols-1 md:grid-cols-3 gap-10 items-end border-b border-slate-50 pb-10 last:border-0 last:pb-0">
-            <div className="space-y-3">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">유종 구분</label>
-              <div className="px-5 py-4 rounded-2xl bg-slate-50 font-black text-slate-800 border border-slate-100 uppercase tracking-tight">
-                {fuel === 'gasoline' ? '휘발유 (Premium)' : fuel === 'diesel' ? '경유 (Diesel)' : '액화석유가스 (LPG)'}
+      {isLoading ? (
+        <div className="py-20 text-center font-black text-slate-300">데이터를 불러오는 중...</div>
+      ) : (
+        <div className="space-y-12">
+          {['gasoline', 'diesel', 'lpg'].map((fuel) => (
+            <div key={fuel} className="grid grid-cols-1 md:grid-cols-3 gap-10 items-end border-b border-slate-50 pb-10 last:border-0 last:pb-0">
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">유종 구분</label>
+                <div className="px-5 py-4 rounded-2xl bg-slate-50 font-black text-slate-800 border border-slate-100 uppercase tracking-tight">
+                  {fuel === 'gasoline' ? '휘발유 (Premium)' : fuel === 'diesel' ? '경유 (Diesel)' : '액화석유가스 (LPG)'}
+                </div>
+              </div>
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">평균 판매가 (원/L)</label>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-black text-slate-700"
+                  value={localRates[fuel]?.avgPrice || 0}
+                  onChange={e => handleChange(fuel, 'avgPrice', e.target.value)}
+                />
+              </div>
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{selectedMonth.split('-')[1]}월 KM당 단가</label>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  className="w-full px-5 py-4 rounded-2xl border-2 border-blue-100 bg-blue-50/20 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-black text-blue-600"
+                  value={localRates[fuel]?.unitPrice || 0}
+                  onChange={e => handleChange(fuel, 'unitPrice', e.target.value)}
+                />
               </div>
             </div>
-            <div className="space-y-3">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">평균 판매가 (원/L)</label>
-              <input 
-                type="number" 
-                step="0.01"
-                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-black text-slate-700"
-                value={localRates[fuel]?.avgPrice || 0}
-                onChange={e => handleChange(fuel, 'avgPrice', e.target.value)}
-              />
-            </div>
-            <div className="space-y-3">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">KM당 보상 단가</label>
-              <input 
-                type="number" 
-                step="0.01"
-                className="w-full px-5 py-4 rounded-2xl border-2 border-blue-100 bg-blue-50/20 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-black text-blue-600"
-                value={localRates[fuel]?.unitPrice || 0}
-                onChange={e => handleChange(fuel, 'unitPrice', e.target.value)}
-              />
-            </div>
-          </div>
-        ))}
+          ))}
 
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6 pt-10 border-t border-slate-50">
-          <div className="flex items-center gap-4">
-             <div className="p-3 bg-slate-100 rounded-xl text-slate-500"><Settings size={20} /></div>
-             <div>
-               <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Global Policy</p>
-               <p className="text-sm font-bold text-slate-700">감가상각 정합성 10% 계수 자동 보정됨</p>
-             </div>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 pt-10 border-t border-slate-50">
+            <div className="flex items-center gap-4">
+               <div className="p-3 bg-slate-100 rounded-xl text-slate-500"><Settings size={20} /></div>
+               <div>
+                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Historical Logic</p>
+                 <p className="text-sm font-bold text-slate-700">{selectedMonth}월 기준 데이터로 최종 처리됨</p>
+               </div>
+            </div>
+            <button 
+              onClick={() => onUpdate(localRates, selectedMonth)}
+              className="w-full md:w-auto bg-blue-600 text-white px-12 py-5 rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95"
+            >
+              {selectedMonth}월 기준값 저장하기
+            </button>
           </div>
-          <button 
-            onClick={() => onUpdate(localRates)}
-            className="w-full md:w-auto bg-blue-600 text-white px-12 py-5 rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95"
-          >
-            변경된 기준값 저장
-          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 };
@@ -1175,6 +1134,247 @@ const MyPage = ({ profile, onUpdate }) => {
           >
             개인 설정값 저장하기
           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Enhanced Components ---
+
+const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile }) => (
+  <nav className="fixed bottom-0 lg:top-0 left-0 w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-r border-slate-100 flex lg:flex-col p-4 lg:p-8 z-50">
+    <div className="hidden lg:flex items-center gap-4 mb-12 px-2">
+      <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-100">
+        <Car size={24} strokeWidth={3} />
+      </div>
+      <div>
+        <h1 className="text-xl font-black text-slate-800 tracking-tight">C-OIL</h1>
+        <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none mt-1">Reimbursement</p>
+      </div>
+    </div>
+
+    <div className="flex lg:flex-col flex-1 gap-1 lg:gap-2">
+      <NavItem icon={<LayoutDashboard size={20}/>} label="대시보드" active={currentView === 'dashboard'} onClick={() => onNavigate('dashboard')} />
+      <NavItem icon={<PlusCircle size={20}/>} label="신규 내역" active={currentView === 'log'} onClick={() => onNavigate('log')} />
+      <NavItem icon={<History size={20}/>} label="정산 내역" active={currentView === 'history'} onClick={() => onNavigate('history')} />
+      {isAdmin && (
+        <>
+          <div className="hidden lg:block h-px bg-slate-50 my-2 mx-4"></div>
+          <NavItem icon={<Settings size={20}/>} label="단가 설정" active={currentView === 'settings'} onClick={() => onNavigate('settings')} />
+          <NavItem icon={<Users size={20}/>} label="인사 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} />
+        </>
+      )}
+      <div className="flex-1 hidden lg:block"></div>
+      <NavItem icon={<UserCircle size={20}/>} label="마이페이지" active={currentView === 'profile'} onClick={() => onNavigate('profile')} />
+      <button 
+        onClick={onLogout}
+        className="hidden lg:flex items-center gap-3 px-5 py-4 rounded-2xl text-sm font-bold text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all mt-4"
+      >
+        <LogOut size={20} /> <span>로그아웃</span>
+      </button>
+    </div>
+  </nav>
+);
+
+const AuthScreen = ({ onLogin, onSignup }) => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed">
+      <div className="bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden border border-white flex flex-col md:flex-row">
+        <div className="bg-blue-600 md:w-5/12 p-12 text-white flex flex-col justify-between relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+          <div className="relative z-10">
+            <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6 border border-white/30">
+              <Car size={32} strokeWidth={2.5} />
+            </div>
+            <h2 className="text-3xl font-black tracking-tighter leading-tight mb-4">가장 스마트한 유류비 정산.</h2>
+            <p className="text-blue-100 font-bold text-sm leading-relaxed opacity-80">조직원을 초대하고, 투명하게 유류비를 정산하세요.</p>
+          </div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40">C-OIL Enterprise</p>
+        </div>
+        
+        <div className="flex-1 p-12">
+          <div className="mb-10">
+            <h3 className="text-2xl font-black text-slate-900 tracking-tight mb-2">
+              {isLogin ? '반갑습니다!' : '새로운 시작'}
+            </h3>
+            <p className="text-sm font-bold text-slate-400">계정 정보를 입력해 주세요.</p>
+          </div>
+
+          <form className="space-y-4" onSubmit={(e) => {
+            e.preventDefault();
+            isLogin ? onLogin(email, password) : onSignup(email, password, name);
+          }}>
+            {!isLogin && (
+              <InputGroup label="이름" icon={<User size={14}/>}>
+                <input 
+                  className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-blue-50 transition-all font-bold text-slate-700"
+                  placeholder="홍길동" value={name} onChange={e => setName(e.target.value)} required 
+                />
+              </InputGroup>
+            )}
+            <InputGroup label="이메일" icon={<Mail size={14}/>}>
+              <input 
+                type="email"
+                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-blue-50 transition-all font-bold text-slate-700"
+                placeholder="example@co.kr" value={email} onChange={e => setEmail(e.target.value)} required 
+              />
+            </InputGroup>
+            <InputGroup label="비밀번호" icon={<Lock size={14}/>}>
+              <input 
+                type="password"
+                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-blue-50 transition-all font-bold text-slate-700"
+                placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required 
+              />
+            </InputGroup>
+
+            <button type="submit" className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-lg shadow-xl shadow-slate-200 mt-6 active:scale-95 transition-all">
+              {isLogin ? '로그인하기' : '회원가입 신청하기'}
+            </button>
+          </form>
+
+          <div className="mt-8 text-center">
+            <button onClick={() => setIsLogin(!isLogin)} className="text-sm font-black text-blue-600 hover:underline">
+              {isLogin ? '계정이 없으신가요? 가입 신청' : '이미 계정이 있다면? 로그인'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AdminPanel = ({ db, appId }) => {
+  const [users, setUsers] = useState([]);
+  const [orgUnits, setOrgUnits] = useState(['본사', '연구소', '영업부', '현장']);
+
+  useEffect(() => {
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubscribe();
+  }, [db, appId]);
+
+  const updateUser = async (uid, updates) => {
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid), updates);
+  };
+
+  const deleteUser = async (uid) => {
+    if (confirm('정말 이 계정을 삭제하시겠습니까?')) {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid));
+    }
+  };
+
+  return (
+    <div className="space-y-10">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        <div className="xl:col-span-2 space-y-6">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
+              <Users className="text-blue-600" /> 직원 명단 및 권한 관리
+            </h3>
+            <span className="bg-slate-100 px-3 py-1 rounded-full text-[10px] font-black text-slate-500 uppercase">
+              Total {users.length}
+            </span>
+          </div>
+
+          <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50/50 border-b border-slate-100">
+                <tr>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">사용자 정보</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">부서 / 권한</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">상태</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">관리</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {users.map(u => (
+                  <tr key={u.uid} className="hover:bg-slate-50/30 transition-colors">
+                    <td className="px-8 py-6">
+                      <div className="font-black text-slate-900">{u.userName}</div>
+                      <div className="text-[11px] font-bold text-slate-400">{u.email}</div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <select 
+                        className="bg-slate-50 text-[11px] font-black px-3 py-1.5 rounded-lg border-none outline-none focus:ring-2 focus:ring-blue-500"
+                        value={u.department}
+                        onChange={(e) => updateUser(u.uid, { department: e.target.value })}
+                      >
+                        {orgUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                      </select>
+                      <div className={`text-[9px] font-black mt-2 uppercase tracking-tighter ${u.role === 'admin' ? 'text-blue-600' : 'text-slate-400'}`}>
+                        {u.role === 'admin' ? 'Administrator' : 'General Staff'}
+                      </div>
+                    </td>
+                    <td className="px-8 py-6 text-center">
+                      <button 
+                        onClick={() => updateUser(u.uid, { status: u.status === 'approved' ? 'pending' : 'approved' })}
+                        className={`text-[10px] font-black px-4 py-2 rounded-xl transition-all ${
+                          u.status === 'approved' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600 ring-2 ring-amber-200'
+                        }`}
+                      >
+                        {u.status === 'approved' ? '정식 승인됨' : '승인 대기중'}
+                      </button>
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                      <div className="flex justify-end gap-2">
+                         <button 
+                           onClick={() => updateUser(u.uid, { role: u.role === 'admin' ? 'staff' : 'admin' })}
+                           className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                           title="권한 변경"
+                         >
+                           <Settings size={18} />
+                         </button>
+                         <button 
+                           onClick={() => deleteUser(u.uid)}
+                           className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                         >
+                           <Trash2 size={18} />
+                         </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+           <h3 className="text-xl font-black text-slate-800 px-2">조직 구성 관리</h3>
+           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
+              <p className="text-xs font-bold text-slate-400 leading-relaxed">회사의 부서 체계를 관리합니다. 등록된 부서는 직원 프로필 설정에서 바로 선택할 수 있습니다.</p>
+              <div className="space-y-2">
+                {orgUnits.map((unit, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl group">
+                    <span className="font-black text-slate-700">{unit}</span>
+                    <button onClick={() => setOrgUnits(orgUnits.filter((_, i) => i !== idx))} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="pt-4">
+                <input 
+                  type="text" 
+                  placeholder="새 부서 추가 (엔터)"
+                  className="w-full px-5 py-4 rounded-2xl border-2 border-dashed border-slate-100 focus:border-blue-500 outline-none font-bold text-sm transition-all"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.target.value) {
+                      setOrgUnits([...orgUnits, e.target.value]);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+              </div>
+           </div>
         </div>
       </div>
     </div>
