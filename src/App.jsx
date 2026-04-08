@@ -965,18 +965,7 @@ const SettingsPanel = ({ fuelRates, onUpdate, db, appId }) => {
         </div>
       </div>
 
-      <div className="mb-12 p-6 bg-blue-50/50 border border-blue-100 rounded-[1.5rem] flex items-start gap-4">
-        <div className="p-3 bg-blue-600 rounded-2xl text-white">
-          <AlertCircle size={24} />
-        </div>
-        <div>
-          <h4 className="text-blue-900 font-black mb-1">{selectedMonth.split('-')[1]}월 단가 산정 가이드</h4>
-          <p className="text-sm text-blue-700 leading-relaxed font-bold">
-            오피넷(Opinet) 전월 평균 가격을 기준으로 {selectedMonth}월 km당 단가를 설정하세요.<br/>
-            저장된 데이터는 해당 월의 운행 내역 정산 시 자동으로 차등 적용됩니다.
-          </p>
-        </div>
-      </div>
+
 
       {isLoading ? (
         <div className="py-20 text-center font-black text-slate-300">데이터를 불러오는 중...</div>
