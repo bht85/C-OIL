@@ -288,8 +288,8 @@ const App = () => {
       <div className={`flex-1 transition-all duration-500 ease-in-out ${isSidebarCollapsed ? 'lg:ml-24' : 'lg:ml-80'} p-6 lg:p-12`}>
         <header className="flex justify-between items-center mb-12">
           <div>
-            <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest block mb-1 tracking-widest">SYSTEM › {view.toUpperCase()}</span>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
+            <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] block mb-2">SYSTEM › {view.toUpperCase()}</span>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">
               {view === 'dashboard' ? '대시보드' : view === 'log' ? '신규 내역' : view === 'history' ? '정산 내역' : view === 'reports' ? '운행 리포트' : view === 'settings' ? '기준 설정' : view === 'admin' ? '인사 관리' : '개인 설정'}
             </h1>
           </div>
@@ -397,8 +397,8 @@ const Dashboard = ({ logs }) => {
         <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 min-h-[450px]">
           <div className="flex justify-between items-center mb-10">
             <div>
-              <h4 className="text-lg font-black text-slate-800">일자별 KM 트래킹</h4>
-              <p className="text-xs font-bold text-slate-400">일일 업무용 운행 거리 추이</p>
+              <h4 className="text-base font-black text-slate-800">일자별 KM 트래킹</h4>
+              <p className="text-[10px] font-bold text-slate-400">당월 업무용 운행 거리 일일 변동 추이</p>
             </div>
             <div className="p-3 bg-slate-50 rounded-xl text-slate-400"><Navigation size={20} /></div>
           </div>
@@ -436,8 +436,8 @@ const StatCard = ({ title, value, icon, subtitle }) => (
   <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col relative overflow-hidden group hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300">
     <div className="flex items-start justify-between z-10">
       <div>
-        <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">{title}</p>
-        <h4 className="text-3xl font-black text-slate-900 tracking-tight">{value}</h4>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{title}</p>
+        <h4 className="text-2xl font-black text-slate-900 tracking-tight">{value}</h4>
       </div>
       <div className="p-4 bg-slate-50 rounded-2xl group-hover:scale-110 group-hover:bg-slate-100 transition-all duration-300">
         {icon}
@@ -797,10 +797,10 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
           </div>
           <div className="p-6 rounded-2xl bg-blue-600 shadow-xl shadow-blue-200 border border-blue-500 text-white flex justify-between items-center transition-all duration-300 hover:scale-[1.02]">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-1">Expected Amount</p>
-              <h4 className="text-2xl font-black">{calculatedAmount.toLocaleString()}원</h4>
+              <p className="text-[9px] font-black uppercase tracking-widest opacity-80 mb-1">Total Expected Amount</p>
+              <h4 className="text-2xl font-black">{calculatedAmount.toLocaleString()}<span className="text-sm ml-1 font-bold">원</span></h4>
             </div>
-            <Calculator size={28} className="opacity-40" />
+            <div className="p-3 bg-white/20 rounded-xl"><Calculator size={24} className="opacity-80" /></div>
           </div>
         </div>
 
@@ -832,14 +832,14 @@ const HistoryTable = ({ logs, onDelete }) => {
   return (
     <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-left">
+        <table className="w-full text-left table-fixed">
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">운행 정보</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">업무 상세</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">구간 및 유종</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">정산 금액</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">작업</th>
+              <th className="w-[140px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">운행 정보</th>
+              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">운행 경로 및 목적</th>
+              <th className="w-[120px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">구간 및 유종</th>
+              <th className="w-[140px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">정산 금액</th>
+              <th className="w-[80px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">작업</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -854,51 +854,53 @@ const HistoryTable = ({ logs, onDelete }) => {
               </tr>
             ) : (
               logs.map((log) => (
-                <tr key={log.id} className="group hover:bg-slate-50/50 transition-colors">
-                  <td className="px-8 py-6">
-                    <div className="font-black text-slate-900">{log.date}</div>
-                    <div className="text-xs font-bold text-slate-400 flex items-center gap-1.5 mt-1">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                <tr key={log.id} className="group hover:bg-slate-50/50 transition-all border-b border-slate-50 last:border-0">
+                  <td className="px-8 py-7">
+                    <div className="font-black text-slate-900 text-sm">{log.date}</div>
+                    <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 mt-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>
                       {log.userName}
                     </div>
                   </td>
-                  <td className="px-8 py-6">
-                    <div className="text-sm font-black text-slate-700 flex flex-wrap items-center gap-1.5 leading-relaxed">
+                  <td className="px-8 py-7">
+                    <div className="text-xs font-black text-slate-700 flex flex-wrap items-center gap-1 leading-relaxed max-w-xl">
                       {log.routeSummary ? (
                         log.routeSummary.split(' → ').map((stop, sIdx, arr) => (
                           <React.Fragment key={sIdx}>
-                            <span>{stop}</span>
-                            {sIdx < arr.length - 1 && <ChevronRight size={12} className="text-slate-300 shrink-0" />}
+                            <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px]">{stop}</span>
+                            {sIdx < arr.length - 1 && <ChevronRight size={10} className="text-slate-300 shrink-0" />}
                           </React.Fragment>
                         ))
                       ) : (
                         <>
-                          {log.departure} <ChevronRight size={14} className="text-slate-300" /> {log.destination}
+                          {log.departure} <ChevronRight size={12} className="text-slate-300" /> {log.destination}
                         </>
                       )}
                     </div>
-                    <div className="text-xs font-bold text-slate-400 mt-1.5 bg-slate-50 px-2 py-1 rounded inline-block">
-                      {log.purpose}
-                    </div>
+                    {log.purpose && (
+                      <div className="text-[10px] font-bold text-blue-500/70 mt-2 bg-blue-50/50 px-2 py-0.5 rounded inline-block">
+                        • {log.purpose}
+                      </div>
+                    )}
                   </td>
-                  <td className="px-8 py-6 text-right">
-                    <div className="font-black text-slate-900">{log.distance} km</div>
-                    <div className={`text-[9px] px-2 py-0.5 rounded-full font-black mt-1.5 inline-block ${
+                  <td className="px-8 py-7 text-right">
+                    <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.distance} <span className="text-[10px] font-bold text-slate-400">km</span></div>
+                    <div className={`text-[8px] px-2 py-0.5 rounded-md font-black mt-1.5 inline-block uppercase tracking-tighter ${
                       log.fuelType === 'gasoline' ? 'bg-blue-50 text-blue-600' : 
                       log.fuelType === 'diesel' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
                     }`}>
                       {log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG'}
                     </div>
                   </td>
-                  <td className="px-8 py-6 text-right">
-                    <span className="font-black text-blue-600 text-lg">{Number(log.amount || 0).toLocaleString()}원</span>
+                  <td className="px-8 py-7 text-right">
+                    <div className="font-black text-blue-600 text-base whitespace-nowrap">{Number(log.amount || 0).toLocaleString()} <span className="text-[10px] font-bold opacity-70">원</span></div>
                   </td>
-                  <td className="px-8 py-6 text-center">
+                  <td className="px-8 py-7 text-center">
                     <button 
                       onClick={() => onDelete(log.id)}
-                      className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90"
+                      className="p-2.5 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90"
                     >
-                      <Trash2 size={20} />
+                      <Trash2 size={18} />
                     </button>
                   </td>
                 </tr>
@@ -1669,10 +1671,10 @@ const ManagementReport = ({ logs, users, db, appId }) => {
         <table className="w-full text-left table-fixed">
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
-              <th className="w-24 px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">날짜</th>
-              <th className="w-40 px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">사용자 / 부서</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">경유 정보</th>
-              <th className="w-32 px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">거리/금액</th>
+              <th className="w-[120px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">날짜</th>
+              <th className="w-[160px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">사용자 / 부서</th>
+              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">운행 정보 (경유지 및 목적)</th>
+              <th className="w-[140px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">거리/금액</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -1699,8 +1701,8 @@ const ManagementReport = ({ logs, users, db, appId }) => {
                       <div className="text-[10px] font-bold text-slate-400 mt-2 bg-slate-50 px-2 py-1 rounded-lg inline-block">{log.purpose}</div>
                     </td>
                     <td className="px-8 py-6 text-right align-top">
-                      <div className="font-black text-slate-900">{log.distance}km</div>
-                      <div className="font-black text-blue-600 text-sm mt-1">{Number(log.amount || 0).toLocaleString()}원</div>
+                      <div className="font-black text-slate-900 whitespace-nowrap">{log.distance}km</div>
+                      <div className="font-black text-blue-600 text-sm mt-1 whitespace-nowrap">{Number(log.amount || 0).toLocaleString()}원</div>
                     </td>
                   </tr>
                 );
