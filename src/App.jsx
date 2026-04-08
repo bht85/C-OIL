@@ -183,9 +183,37 @@ const App = () => {
   const signup = async (email, password, userName) => {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await updateAuthProfile(cred.user, { displayName: userName });
+      const u = cred.user;
+      
+      // Firebase Auth 프로필 업데이트 (이미지나 다른 서비스 연동 대비)
+      await updateAuthProfile(u, { displayName: userName });
+
+      // Firestore 프로필 즉시 생성 (신규 사용자 이름 누락 방지)
+      const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', u.uid);
+      const adminEmails = ['esc913@composecoffee.co.kr', 'choihy@composecoffee.co.kr'];
+      const isMasterAdmin = adminEmails.includes(u.email);
+
+      const newProfile = {
+        uid: u.uid,
+        email: u.email,
+        userName: userName, // 폼에서 입력받은 이름을 직접 사용
+        role: isMasterAdmin ? 'admin' : 'staff',
+        status: isMasterAdmin ? 'approved' : 'pending',
+        department: isMasterAdmin ? '인사팀' : '미지정',
+        vehicleName: '',
+        fuelType: 'gasoline',
+        homeAddress: '',
+        homeAlias: '우리집',
+        savedLocations: []
+      };
+      
+      await setDoc(userDocRef, newProfile);
+      setProfile(newProfile);
       showStatus("가입 신청 완료! 승인 대기 중입니다.");
-    } catch { showStatus("회원가입 실패", 'error'); }
+    } catch (err) { 
+      console.error(err);
+      showStatus("회원가입 실패", 'error'); 
+    }
   };
 
   const logout = () => signOut(auth).then(() => setView('dashboard'));
