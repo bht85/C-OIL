@@ -26,7 +26,12 @@ import {
   AlertCircle,
   MapPin,
   FileText,
-  UserCircle
+  UserCircle,
+  Mail,
+  Lock,
+  User,
+  Users,
+  LogOut
 } from 'lucide-react';
 import { 
   BarChart, 
