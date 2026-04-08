@@ -1329,6 +1329,8 @@ const AdminPanel = ({ db, appId }) => {
     }
   };
 
+  const [newOrgUnit, setNewOrgUnit] = useState('');
+
   return (
     <div className="space-y-10">
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
@@ -1427,10 +1429,12 @@ const AdminPanel = ({ db, appId }) => {
                   type="text" 
                   placeholder="새 부서 추가 (엔터)"
                   className="w-full px-5 py-4 rounded-2xl border-2 border-dashed border-slate-100 focus:border-blue-500 outline-none font-bold text-sm transition-all"
+                  value={newOrgUnit}
+                  onChange={(e) => setNewOrgUnit(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && e.target.value) {
-                      updateOrgUnitsRemote([...orgUnits, e.target.value]);
-                      e.target.value = '';
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing && newOrgUnit.trim()) {
+                      updateOrgUnitsRemote([...orgUnits, newOrgUnit.trim()]);
+                      setNewOrgUnit('');
                     }
                   }}
                 />
