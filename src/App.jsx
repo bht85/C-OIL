@@ -970,31 +970,27 @@ const SettingsPanel = ({ fuelRates, onUpdate, db, appId }) => {
       {isLoading ? (
         <div className="py-20 text-center font-black text-slate-300">데이터를 불러오는 중...</div>
       ) : (
-        <div className="space-y-12">
+        <div className="space-y-6">
           {['gasoline', 'diesel', 'lpg'].map((fuel) => (
-            <div key={fuel} className="grid grid-cols-1 md:grid-cols-3 gap-10 items-end border-b border-slate-50 pb-10 last:border-0 last:pb-0">
-              <div className="space-y-3">
+            <div key={fuel} className="grid grid-cols-1 md:grid-cols-3 gap-8 items-end border-b border-slate-50 pb-6 last:border-0 last:pb-0 font-['Outfit']">
+              <div className="space-y-2.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">유종 구분</label>
-                <div className="px-5 py-4 rounded-2xl bg-slate-50 font-black text-slate-800 border border-slate-100 uppercase tracking-tight">
+                <div className="w-full px-5 h-[64px] flex items-center rounded-2xl bg-slate-50 font-black text-slate-700 border-2 border-slate-50 uppercase tracking-tight text-sm">
                   {fuel === 'gasoline' ? '휘발유 (Premium)' : fuel === 'diesel' ? '경유 (Diesel)' : '액화석유가스 (LPG)'}
                 </div>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">평균 판매가 (원/L)</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-black text-slate-700"
-                  value={localRates[fuel]?.avgPrice || 0}
-                  onChange={e => handleChange(fuel, 'avgPrice', e.target.value)}
-                />
+                <div className="w-full px-5 h-[64px] flex items-center rounded-2xl bg-slate-50 font-black text-slate-700 border-2 border-slate-50 text-sm">
+                  {localRates[fuel]?.avgPrice || 0}
+                </div>
               </div>
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{selectedMonth.split('-')[1]}월 KM당 단가</label>
+              <div className="space-y-2.5">
+                <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest ml-1">{selectedMonth.split('-')[1]}월 KM당 단가</label>
                 <input 
                   type="number" 
                   step="0.01"
-                  className="w-full px-5 py-4 rounded-2xl border-2 border-blue-100 bg-blue-50/20 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-black text-blue-600"
+                  className="w-full px-5 h-[64px] rounded-2xl border-2 border-blue-100 bg-blue-50/20 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 outline-none transition-all font-black text-blue-600 text-sm"
                   value={localRates[fuel]?.unitPrice || 0}
                   onChange={e => handleChange(fuel, 'unitPrice', e.target.value)}
                 />
