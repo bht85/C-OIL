@@ -20,6 +20,8 @@ import {
   Car, 
   Calculator, 
   ChevronRight, 
+  ChevronLeft,
+  Menu,
   Trash2, 
   Download, 
   AlertCircle, 
@@ -32,7 +34,9 @@ import {
   Users, 
   LogOut, 
   Calendar,
-  Navigation
+  Navigation,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -45,7 +49,9 @@ import {
   PieChart, 
   Pie, 
   Cell,
-  Legend
+  Legend,
+  AreaChart,
+  Area
 } from 'recharts';
 
 // --- Safe Configuration Handling ---
@@ -79,6 +85,7 @@ const App = () => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [view, setView] = useState('dashboard');
   const [logs, setLogs] = useState([]);
   const [fuelRates, setFuelRates] = useState({
@@ -230,8 +237,16 @@ const App = () => {
 
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-slate-50 font-['Outfit']">
-      <Sidebar currentView={view} onNavigate={setView} onLogout={logout} isAdmin={isAdmin} userProfile={profile} />
-      <div className="flex-1 lg:ml-80 p-6 lg:p-12">
+      <Sidebar 
+        currentView={view} 
+        onNavigate={setView} 
+        onLogout={logout} 
+        isAdmin={isAdmin} 
+        userProfile={profile} 
+        isCollapsed={isSidebarCollapsed}
+        onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+      />
+      <div className={`flex-1 transition-all duration-500 ease-in-out ${isSidebarCollapsed ? 'lg:ml-24' : 'lg:ml-80'} p-6 lg:p-12`}>
         <header className="flex justify-between items-center mb-12">
           <div>
             <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest block mb-1 tracking-widest">SYSTEM › {view.toUpperCase()}</span>
@@ -263,18 +278,20 @@ const App = () => {
 
 // --- Sub-Components ---
 
-const NavItem = ({ icon, label, active, onClick }) => (
+const NavItem = ({ icon, label, active, onClick, isCollapsed }) => (
   <button 
     onClick={onClick}
-    className={`w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-sm font-bold transition-all duration-200 group ${
+    className={`w-full flex items-center gap-3 ${isCollapsed ? 'px-0 justify-center' : 'px-5'} py-4 rounded-2xl text-sm font-bold transition-all duration-300 group relative ${
       active 
-      ? 'bg-blue-600 text-white shadow-lg shadow-blue-100 translate-x-1' 
+      ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' 
       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-    }`}
+    } ${active && !isCollapsed ? 'translate-x-1' : ''}`}
+    title={isCollapsed ? label : ''}
   >
-    <span className={`${active ? 'text-white' : 'text-slate-400 group-hover:text-blue-500'} transition-colors`}>{icon}</span>
-    <span>{label}</span>
-    {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white opacity-40"></div>}
+    <span className={`${active ? 'text-white' : 'text-slate-400 group-hover:text-blue-500'} transition-colors shrink-0`}>{icon}</span>
+    {!isCollapsed && <span className="whitespace-nowrap overflow-hidden transition-all duration-300">{label}</span>}
+    {active && !isCollapsed && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white opacity-40"></div>}
+    {active && isCollapsed && <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white rounded-l-full opacity-60"></div>}
   </button>
 );
 
@@ -288,25 +305,29 @@ const Dashboard = ({ logs }) => {
   const stats = useMemo(() => {
     const totalDist = filteredLogs.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
     const totalAmount = filteredLogs.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-    const gasolineDist = filteredLogs.filter(l => l.fuelType === 'gasoline').reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
-    const dieselDist = filteredLogs.filter(l => l.fuelType === 'diesel').reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
-    const lpgDist = filteredLogs.filter(l => l.fuelType === 'lpg').reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
-
-    const userStats = {};
+    
+    // 일자별 km 트래킹 데이터 생성
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    
+    const dailyStats = {};
     filteredLogs.forEach(l => {
-      const name = String(l.userName || "알 수 없음");
-      userStats[name] = (userStats[name] || 0) + Number(l.amount || 0);
+      const day = l.date.split('-')[2];
+      if (day) {
+        dailyStats[day] = (dailyStats[day] || 0) + (Number(l.distance) || 0);
+      }
     });
 
-    const barData = Object.keys(userStats).map(name => ({ name, value: userStats[name] }));
-    const pieData = [
-      { name: '휘발유', value: gasolineDist },
-      { name: '경유', value: dieselDist },
-      { name: 'LPG', value: lpgDist },
-    ].filter(d => d.value > 0);
+    const dailyData = Array.from({ length: daysInMonth }, (_, i) => {
+      const d = String(i + 1).padStart(2, '0');
+      return {
+        name: `${month}/${d}`,
+        distance: Number((dailyStats[d] || 0).toFixed(1))
+      };
+    });
 
-    return { totalDist, totalAmount, count: filteredLogs.length, barData, pieData };
-  }, [filteredLogs]);
+    return { totalDist, totalAmount, count: filteredLogs.length, dailyData };
+  }, [filteredLogs, selectedMonth]);
 
   return (
     <div className="space-y-10">
@@ -332,55 +353,37 @@ const Dashboard = ({ logs }) => {
         <StatCard title="기록된 데이터" value={`${stats.count}건`} subtitle="서버 동기화된 내역" icon={<History size={24}/>} color="amber" />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <div className="xl:col-span-2 bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 min-h-[450px]">
+      <div className="grid grid-cols-1 gap-8">
+        <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 min-h-[450px]">
           <div className="flex justify-between items-center mb-10">
             <div>
-              <h4 className="text-lg font-black text-slate-800">사용자별 정산 현황</h4>
-              <p className="text-xs font-bold text-slate-400">개인별 누적 유류비 지급액</p>
+              <h4 className="text-lg font-black text-slate-800">일자별 KM 트래킹</h4>
+              <p className="text-xs font-bold text-slate-400">일일 업무용 운행 거리 추이</p>
             </div>
-            <div className="p-3 bg-slate-50 rounded-xl text-slate-400"><LayoutDashboard size={20} /></div>
+            <div className="p-3 bg-slate-50 rounded-xl text-slate-400"><Navigation size={20} /></div>
           </div>
           <div className="h-[300px] w-full">
-            {stats.barData.length > 0 ? (
+            {stats.dailyData.some(d => d.distance > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stats.barData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
+                <AreaChart data={stats.dailyData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                  <defs>
+                    <linearGradient id="colorDist" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 900, fill: '#64748b' }} interval={0} angle={-45} textAnchor="end" dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 900, fill: '#64748b' }} tickFormatter={(value) => `${(value / 10000).toFixed(1)}만`} />
-                  <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontWeight: 900, padding: '12px' }} />
-                  <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 6, 6]} barSize={40} />
-                </BarChart>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 900, fill: '#64748b' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 900, fill: '#64748b' }} tickFormatter={(value) => `${value}km`} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontWeight: 900, padding: '12px' }}
+                    formatter={(value) => [`${value} km`, '운행 거리']}
+                  />
+                  <Area type="monotone" dataKey="distance" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#colorDist)" />
+                </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyChart message="해당 월의 데이터가 없습니다." />
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100">
-          <div className="flex justify-between items-center mb-10">
-            <div>
-              <h4 className="text-lg font-black text-slate-800">유종 분포</h4>
-              <p className="text-xs font-bold text-slate-400">주행 거리 기준 비중</p>
-            </div>
-            <div className="p-3 bg-slate-50 rounded-xl text-slate-400"><Fuel size={20} /></div>
-          </div>
-          <div className="h-[300px] w-full">
-            {stats.pieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={stats.pieData} innerRadius={70} outerRadius={100} paddingAngle={8} dataKey="value">
-                    {stats.pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} cornerRadius={8} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontWeight: 900 }} />
-                  <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 900, paddingTop: '20px' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyChart message="데이터 없음" />
+              <EmptyChart message="해당 월의 주행 데이터가 없습니다." />
             )}
           </div>
         </div>
@@ -658,14 +661,14 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                     </button>
                   ))}
                 </div>
-                <div className="flex gap-3 items-center">
+                <div className="flex gap-3 items-center flex-nowrap">
                   <div className="flex-[2] relative">
                     <input 
                       type="text" 
                       placeholder={`${wp.label} 주소 검색`} 
                       readOnly
                       onClick={() => openSearch(idx)}
-                      className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-200 group-hover:border-blue-200 cursor-pointer focus:bg-white focus:ring-4 focus:ring-blue-50/50 outline-none transition-all font-bold text-slate-700"
+                      className="w-full max-w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-200 group-hover:border-blue-200 cursor-pointer focus:bg-white focus:ring-4 focus:ring-blue-50/50 outline-none transition-all font-bold text-slate-700 truncate overflow-hidden"
                       value={wp.address}
                     />
                     {!wp.address && (
@@ -678,7 +681,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                       placeholder="명칭 (필수입력)" 
                       className={`w-full px-5 py-4 rounded-2xl bg-slate-50 border-2 outline-none transition-all font-bold text-sm ${
                         wp.alias ? 'border-slate-100 text-slate-600 focus:border-blue-400' : 'border-red-100 text-red-500 focus:border-red-300'
-                      }`}
+                      } truncate overflow-hidden`}
                       value={wp.alias}
                       onChange={(e) => handleAliasChange(idx, e.target.value)}
                     />
@@ -1179,36 +1182,58 @@ const MyPage = ({ profile, onUpdate }) => {
 
 // --- Enhanced Components ---
 
-const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile }) => (
-  <nav className="fixed bottom-0 lg:top-0 left-0 w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-r border-slate-100 flex lg:flex-col p-4 lg:p-8 z-50">
-    <div className="hidden lg:flex items-center gap-4 mb-12 px-2">
-      <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-100">
-        <Car size={24} strokeWidth={3} />
+const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCollapsed, onToggle }) => (
+  <nav className={`fixed bottom-0 lg:top-0 left-0 w-full ${isCollapsed ? 'lg:w-24' : 'lg:w-80'} bg-white border-t lg:border-t-0 lg:border-r border-slate-100 flex lg:flex-col p-4 lg:p-6 z-50 transition-all duration-500 ease-in-out`}>
+    <div className={`hidden lg:flex items-center ${isCollapsed ? 'justify-center mb-10' : 'justify-between mb-12 px-2'}`}>
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-100 shrink-0">
+          <Car size={24} strokeWidth={3} />
+        </div>
+        {!isCollapsed && (
+          <div className="animate-fade-in">
+            <h1 className="text-xl font-black text-slate-800 tracking-tight">C-OIL</h1>
+            <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none mt-1">Reimbursement</p>
+          </div>
+        )}
       </div>
-      <div>
-        <h1 className="text-xl font-black text-slate-800 tracking-tight">C-OIL</h1>
-        <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none mt-1">Reimbursement</p>
-      </div>
+      {!isCollapsed && (
+        <button 
+          onClick={onToggle}
+          className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-100 hover:text-blue-600 transition-all"
+        >
+          <PanelLeftClose size={20} />
+        </button>
+      )}
     </div>
 
-    <div className="flex lg:flex-col flex-1 gap-1 lg:gap-2">
-      <NavItem icon={<LayoutDashboard size={20}/>} label="대시보드" active={currentView === 'dashboard'} onClick={() => onNavigate('dashboard')} />
-      <NavItem icon={<PlusCircle size={20}/>} label="신규 내역" active={currentView === 'log'} onClick={() => onNavigate('log')} />
-      <NavItem icon={<History size={20}/>} label="정산 내역" active={currentView === 'history'} onClick={() => onNavigate('history')} />
+    {isCollapsed && (
+      <button 
+        onClick={onToggle}
+        className="hidden lg:flex items-center justify-center p-3 mb-8 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+      >
+        <PanelLeftOpen size={20} />
+      </button>
+    )}
+
+    <div className="flex lg:flex-col flex-1 gap-1 lg:gap-2 overflow-hidden">
+      <NavItem isCollapsed={isCollapsed} icon={<LayoutDashboard size={20}/>} label="대시보드" active={currentView === 'dashboard'} onClick={() => onNavigate('dashboard')} />
+      <NavItem isCollapsed={isCollapsed} icon={<PlusCircle size={20}/>} label="신규 내역" active={currentView === 'log'} onClick={() => onNavigate('log')} />
+      <NavItem isCollapsed={isCollapsed} icon={<History size={20}/>} label="정산 내역" active={currentView === 'history'} onClick={() => onNavigate('history')} />
       {isAdmin && (
         <>
-          <div className="hidden lg:block h-px bg-slate-50 my-2 mx-4"></div>
-          <NavItem icon={<Settings size={20}/>} label="단가 설정" active={currentView === 'settings'} onClick={() => onNavigate('settings')} />
-          <NavItem icon={<Users size={20}/>} label="인사 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} />
+          <div className={`hidden lg:block h-px bg-slate-50 my-2 ${isCollapsed ? 'mx-2' : 'mx-4'}`}></div>
+          <NavItem isCollapsed={isCollapsed} icon={<Settings size={20}/>} label="단가 설정" active={currentView === 'settings'} onClick={() => onNavigate('settings')} />
+          <NavItem isCollapsed={isCollapsed} icon={<Users size={20}/>} label="인사 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} />
         </>
       )}
       <div className="flex-1 hidden lg:block"></div>
-      <NavItem icon={<UserCircle size={20}/>} label="마이페이지" active={currentView === 'profile'} onClick={() => onNavigate('profile')} />
+      <NavItem isCollapsed={isCollapsed} icon={<UserCircle size={20}/>} label="마이페이지" active={currentView === 'profile'} onClick={() => onNavigate('profile')} />
       <button 
         onClick={onLogout}
-        className="hidden lg:flex items-center gap-3 px-5 py-4 rounded-2xl text-sm font-bold text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all mt-4"
+        className={`hidden lg:flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-5'} py-4 rounded-2xl text-sm font-bold text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all mt-4`}
+        title={isCollapsed ? "로그아웃" : ""}
       >
-        <LogOut size={20} /> <span>로그아웃</span>
+        <LogOut size={20} className="shrink-0" /> {!isCollapsed && <span>로그아웃</span>}
       </button>
     </div>
   </nav>
