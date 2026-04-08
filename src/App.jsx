@@ -422,8 +422,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     waypoints: [
-      { id: 'start', label: '출발지', address: profile?.homeAddress || '', alias: profile?.homeAlias || '', lat: profile?.homeLat || 37.3385, lng: profile?.homeLng || 126.9634 },
-      { id: 'end', label: '도착지', address: '', alias: '', lat: 37.5, lng: 127.0 }
+      { id: 'start', label: '출발지', address: '', alias: '', lat: 37.5665, lng: 126.9780 },
+      { id: 'end', label: '도착지', address: '', alias: '', lat: 37.4979, lng: 127.0276 }
     ],
     purpose: '',
     fuelType: profile?.fuelType || 'gasoline',
@@ -588,7 +588,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
     setFormData(prev => ({ 
       ...prev, 
       waypoints: [
-        { id: 'start', label: '출발지', address: profile?.homeAddress || '', alias: profile?.homeAlias || '', lat: profile?.homeLat || 37.5665, lng: profile?.homeLng || 126.9780 },
+        { id: 'start', label: '출발지', address: '', alias: '', lat: 37.5665, lng: 126.9780 },
         { id: 'end', label: '도착지', address: '', alias: '', lat: 37.4979, lng: 127.0276 }
       ], 
       purpose: '',
