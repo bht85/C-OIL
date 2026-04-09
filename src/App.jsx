@@ -563,8 +563,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     waypoints: [
-      { id: 'start', label: '출발지', address: '', alias: '', lat: 37.5665, lng: 126.9780 },
-      { id: 'end', label: '도착지', address: '', alias: '', lat: 37.4979, lng: 127.0276 }
+      { id: 'start', label: '출발지', address: '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780 },
+      { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276 }
     ],
     purpose: '',
     fuelType: profile?.fuelType || 'gasoline',
@@ -708,6 +708,12 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
     setFormData({ ...formData, waypoints: newWaypoints });
   };
 
+  const handleStopPurposeChange = (index, value) => {
+    const newWaypoints = [...formData.waypoints];
+    newWaypoints[index].purpose = value;
+    setFormData({ ...formData, waypoints: newWaypoints });
+  };
+
   const addStop = () => {
     const newWaypoints = [...formData.waypoints];
     const insertPos = newWaypoints.length - 1;
@@ -716,6 +722,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
       label: `경유지 ${newWaypoints.length - 1}`, 
       address: '', 
       alias: '',
+      purpose: '',
       lat: 37.5, 
       lng: 127.0 
     });
@@ -742,7 +749,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
       fuelType: formData.fuelType,
       amount: calculatedAmount,
       routeSummary: formData.waypoints
-        .map(w => `[${w.alias}] ${w.address}`)
+        .map(w => `[${w.alias}${w.purpose ? ` (${w.purpose})` : ''}] ${w.address}`)
         .join(' → ')
     };
     
@@ -750,8 +757,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
     setFormData(prev => ({ 
       ...prev, 
       waypoints: [
-        { id: 'start', label: '출발지', address: '', alias: '', lat: 37.5665, lng: 126.9780 },
-        { id: 'end', label: '도착지', address: '', alias: '', lat: 37.4979, lng: 127.0276 }
+        { id: 'start', label: '출발지', address: '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780 },
+        { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276 }
       ], 
       purpose: '',
       distance: 0,
@@ -854,11 +861,21 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                     )}
                   </div>
 
+                  <div className="flex-1 relative">
+                    <input 
+                      type="text" 
+                      placeholder="방문 목적" 
+                      className="w-full px-4 py-4 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:bg-white transition-all font-bold text-sm text-slate-600 truncate"
+                      value={wp.purpose}
+                      onChange={(e) => handleStopPurposeChange(idx, e.target.value)}
+                    />
+                  </div>
+
                   {idx > 0 && idx < formData.waypoints.length - 1 ? (
                     <button 
                       type="button" 
                       onClick={() => removeStop(idx)}
-                      className="p-3 text-slate-300 hover:text-red-500 transition-all active:scale-90"
+                      className="p-2 text-slate-300 hover:text-red-500 transition-all active:scale-90"
                     >
                       <Trash2 size={18} />
                     </button>
