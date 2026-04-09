@@ -38,7 +38,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
-  X
+  X,
+  Star
 } from 'lucide-react';
 import { 
   BarChart, 
