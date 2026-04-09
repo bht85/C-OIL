@@ -36,7 +36,8 @@ import {
   Calendar,
   Navigation,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Search
 } from 'lucide-react';
 import { 
   BarChart, 
