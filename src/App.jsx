@@ -10,7 +10,7 @@ import {
   signOut,
   updateProfile as updateAuthProfile
 } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, query, getDoc, updateDoc, orderBy } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, query, getDoc, updateDoc, orderBy, getDocs, writeBatch, where } from 'firebase/firestore';
 import { 
   LayoutDashboard, 
   PlusCircle, 
@@ -304,10 +304,37 @@ const App = () => {
 
   const updateSettings = async (rates, month) => {
     try {
+      // 1. 기준 단가 저장
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'fuelRates', month), rates);
+      
+      // 2. 해당 월의 모든 기존 운행 내역을 새로운 단가로 재계산하여 업데이트 (원칙 반영)
+      const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
+      const q = query(logsRef, where("date", ">=", `${month}-01`), where("date", "<=", `${month}-31`));
+      const logSnap = await getDocs(q);
+      
+      const batch = writeBatch(db);
+      let count = 0;
+      
+      logSnap.docs.forEach(logDoc => {
+        const data = logDoc.data();
+        const fuelType = data.fuelType || 'gasoline';
+        const unitPrice = rates[fuelType]?.unitPrice || 0;
+        const newAmount = Math.round(data.distance * unitPrice);
+        
+        if (data.amount !== newAmount) {
+          batch.update(logDoc.ref, { amount: newAmount });
+          count++;
+        }
+      });
+      
+      await batch.commit();
+      
+      showStatus(`${month}월 기준 단가 및 내역(${count}건) 업데이트 완료`);
       setFuelRates(rates);
-      showStatus("단가 설정 저장됨");
-    } catch { showStatus("저장 실패", 'error'); }
+    } catch (err) {
+      console.error(err);
+      showStatus('설정 저장 중 오류가 발생했습니다.', 'error');
+    }
   };
 
   const handleExportData = () => {
