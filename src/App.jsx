@@ -1124,57 +1124,58 @@ const MyPage = ({ profile, onUpdate }) => {
   };
 
   return (
-    <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 max-w-4xl">
-      <div className="mb-12 flex items-center gap-6">
-        <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-blue-100">
-          <UserCircle size={40} />
+    <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 max-w-4xl mx-auto animate-fade-in">
+      <div className="mb-6 flex items-center gap-5">
+        <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100 shrink-0">
+          <UserCircle size={28} />
         </div>
         <div>
-          <h3 className="text-2xl font-black text-slate-800">개인 설정 관리</h3>
-          <p className="text-sm font-bold text-slate-400">자주 사용하는 주소와 차량 정보를 등록하세요.</p>
+          <h3 className="text-xl font-black text-slate-800 tracking-tight">개인 설정 관리</h3>
+          <p className="text-[11px] font-bold text-slate-400">자주 사용하는 주소와 차량 정보를 효율적으로 관리하세요.</p>
         </div>
       </div>
 
-      <div className="space-y-8">
-        <section className="space-y-6">
+      <div className="space-y-5">
+        <section className="space-y-3 p-5 bg-slate-50/50 rounded-2xl border border-slate-50">
           <div className="flex items-center gap-2 px-1">
-            <MapPin size={18} className="text-blue-500" />
-            <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">기본 출발지 설정 (집 주소)</h4>
+            <MapPin size={16} className="text-indigo-500" />
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">기본 출발지 설정 (집 주소)</h4>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-             <div className="md:col-span-2">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+             <div className="md:col-span-3">
                 <input 
                   type="text" 
                   readOnly 
                   placeholder="주소 검색 버튼을 눌러주세요"
-                  className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 outline-none"
+                  className="w-full px-4 py-3 rounded-xl bg-white border border-slate-100 font-bold text-slate-700 outline-none text-sm"
                   value={localProfile.homeAddress} 
                 />
              </div>
              <button 
                onClick={openHomeSearch}
-               className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-black hover:bg-slate-800 transition-all"
+               className="bg-indigo-600 text-white px-4 py-3 rounded-xl font-black hover:bg-indigo-700 transition-all text-xs shadow-md shadow-indigo-100"
              >
                주소 검색
              </button>
-             <div className="md:col-span-3">
-                <InputGroup label="집 별칭 (ex: 자택, 본가)" icon={<FileText size={14}/>}>
+             <div className="md:col-span-4">
+                <div className="flex items-center gap-3">
+                  <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">집 별칭 :</label>
                   <input 
                     type="text" 
-                    className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 outline-none transition-all font-bold text-slate-700"
+                    className="flex-1 px-4 py-3 rounded-xl bg-white border border-slate-100 focus:ring-4 focus:ring-indigo-50/50 outline-none transition-all font-bold text-slate-700 text-sm"
                     value={localProfile.homeAlias}
                     onChange={(e) => setLocalProfile({...localProfile, homeAlias: e.target.value})}
                   />
-                </InputGroup>
+                </div>
              </div>
           </div>
         </section>
 
-        <section className="space-y-6">
+        <section className="space-y-3">
           <div className="flex justify-between items-center px-1">
             <div className="flex items-center gap-2">
-              <PlusCircle size={18} className="text-blue-500" />
-              <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">자주 가는 장소 (즐겨찾기)</h4>
+              <PlusCircle size={16} className="text-indigo-500" />
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">자주 가는 장소 (즐겨찾기)</h4>
             </div>
             <button 
               onClick={() => {
@@ -1204,52 +1205,45 @@ const MyPage = ({ profile, onUpdate }) => {
                   }
                 }).open();
               }}
-              className="text-[10px] font-black bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition-all"
+              className="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-600 hover:text-white transition-all uppercase tracking-tighter"
             >
               + 장소 추가
             </button>
           </div>
           
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
              {(localProfile.savedLocations || []).length === 0 ? (
-               <div className="py-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-100">
-                 <p className="text-xs font-bold text-slate-400">등록된 장소가 없습니다. 자주 가는 곳을 등록해 보세요!</p>
+               <div className="py-4 text-center bg-slate-50 rounded-xl border-2 border-dashed border-slate-100 md:col-span-2">
+                 <p className="text-[10px] font-bold text-slate-400">등록된 장소가 없습니다.</p>
                </div>
              ) : (
                localProfile.savedLocations.map((loc) => (
-                 <div key={loc.id} className="flex items-center justify-between p-5 bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-                   <div className="flex items-center gap-4 flex-1">
-                      <div className="p-3 bg-slate-50 rounded-2xl text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors">
-                        <MapPin size={20} />
+                 <div key={loc.id} className="flex items-center justify-between p-3 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+                   <div className="flex items-center gap-3 flex-1 overflow-hidden">
+                      <div className="p-2 bg-slate-50 rounded-xl text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors shrink-0">
+                        <MapPin size={16} />
                       </div>
-                     <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex-1 max-w-[240px]">
-                            <input 
-                              className="w-full text-base font-black text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 outline-none transition-all"
-                              value={loc.name}
-                              placeholder="예: 회사, 본사"
-                              onChange={(e) => {
-                                const newList = localProfile.savedLocations.map(l => l.id === loc.id ? {...l, name: e.target.value} : l);
-                                setLocalProfile({...localProfile, savedLocations: newList});
-                              }}
-                            />
-                            <div className="absolute -top-4 left-1">
-                               <p className="text-[9px] font-black text-indigo-500 uppercase tracking-tighter opacity-70">명칭 수정 가능</p>
-                            </div>
-                          </div>
-                        </div>
-                        <p className="text-[11px] font-bold text-slate-400 mt-0.5">{loc.address}</p>
-                     </div>
+                      <div className="flex-1 overflow-hidden">
+                        <input 
+                          className="w-full text-sm font-black text-slate-800 bg-transparent border-none p-0 focus:ring-0 outline-none"
+                          value={loc.name}
+                          placeholder="명칭 입력"
+                          onChange={(e) => {
+                            const newList = localProfile.savedLocations.map(l => l.id === loc.id ? {...l, name: e.target.value} : l);
+                            setLocalProfile({...localProfile, savedLocations: newList});
+                          }}
+                        />
+                        <p className="text-[10px] font-bold text-slate-400 truncate">{loc.address}</p>
+                      </div>
                    </div>
                    <button 
                      onClick={() => {
                         const newList = localProfile.savedLocations.filter(l => l.id !== loc.id);
                         setLocalProfile({...localProfile, savedLocations: newList});
                      }}
-                     className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                     className="p-2 text-slate-200 hover:text-red-500 transition-all shrink-0"
                    >
-                     <Trash2 size={18} />
+                     <Trash2 size={16} />
                    </button>
                  </div>
                ))
@@ -1257,39 +1251,41 @@ const MyPage = ({ profile, onUpdate }) => {
           </div>
         </section>
 
-        <section className="space-y-6">
+        <section className="space-y-4 p-5 bg-slate-50/50 rounded-2xl border border-slate-50">
           <div className="flex items-center gap-2 px-1">
-            <Fuel size={18} className="text-indigo-500" />
-            <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">차량 및 주종 정보</h4>
+            <Fuel size={16} className="text-indigo-500" />
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">차량 및 주종 정보</h4>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-             <InputGroup label="차량 별명 (ex: 내 차, 소나타)" icon={<Car size={14}/>}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">차량 별명</label>
                 <input 
-                  type="text" 
-                  className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700"
-                  placeholder="예: 제네시스"
-                  value={localProfile.vehicleName}
-                  onChange={(e) => setLocalProfile({...localProfile, vehicleName: e.target.value})}
+                   type="text" 
+                   className="w-full px-4 py-3 rounded-xl bg-white border border-slate-100 focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700 text-sm"
+                   placeholder="예: 쏘렌토"
+                   value={localProfile.vehicleName}
+                   onChange={(e) => setLocalProfile({...localProfile, vehicleName: e.target.value})}
                 />
-             </InputGroup>
-             <InputGroup label="기본 유종 설정" icon={<Fuel size={14}/>}>
+             </div>
+             <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">기본 유종</label>
                 <select 
-                  className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700"
-                  value={localProfile.fuelType}
-                  onChange={(e) => setLocalProfile({...localProfile, fuelType: e.target.value})}
+                   className="w-full px-4 py-3 rounded-xl bg-white border border-slate-100 focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700 text-sm appearance-none"
+                   value={localProfile.fuelType}
+                   onChange={(e) => setLocalProfile({...localProfile, fuelType: e.target.value})}
                 >
-                  <option value="gasoline">휘발유 (Gasoline)</option>
-                  <option value="diesel">경유 (Diesel)</option>
-                  <option value="lpg">액화석유가스 (LPG)</option>
+                   <option value="gasoline">휘발유 (Gasoline)</option>
+                   <option value="diesel">경유 (Diesel)</option>
+                   <option value="lpg">액화석유가스 (LPG)</option>
                 </select>
-             </InputGroup>
+             </div>
           </div>
         </section>
 
-        <div className="pt-6 border-t border-slate-50">
+        <div className="pt-2">
           <button 
             onClick={() => onUpdate(localProfile)}
-            className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+            className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 text-base"
           >
             개인 설정값 저장하기
           </button>
