@@ -169,6 +169,26 @@ const App = () => {
     return () => unsubscribeAuth();
   }, []);
 
+  // 자동 로그아웃 로직 (10분 무활동 시)
+  useEffect(() => {
+    if (!user) return;
+    let timer;
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        logout();
+        showStatus("보안을 위해 10분간 무활동 시 자동 로그아웃되었습니다.", "info");
+      }, 10 * 60 * 1000);
+    };
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(e => window.addEventListener(e, resetTimer));
+    resetTimer();
+    return () => {
+      if (timer) clearTimeout(timer);
+      events.forEach(e => window.removeEventListener(e, resetTimer));
+    };
+  }, [user]);
+
   useEffect(() => {
     if (!user || (profile?.status !== 'approved' && profile?.role !== 'admin')) return;
     
