@@ -79,7 +79,10 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = getSafeGlobal('__app_id', 'vehicle-fuel-tracker');
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+const MASTER_ADMINS = ['esc913@composecoffee.co.kr', 'choihy@composecoffee.co.kr', 'jang_sw@composecoffee.co.kr'];
+const isMasterAdmin = (email) => email && MASTER_ADMINS.includes(email.toLowerCase());
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -117,17 +120,15 @@ const App = () => {
         if (userDoc.exists()) {
           setProfile(userDoc.data());
         } else {
-          // 마스터 관리자 이메일 체크
-          const adminEmails = ['esc913@composecoffee.co.kr', 'choihy@composecoffee.co.kr'];
-          const isMasterAdmin = adminEmails.includes(u.email);
+          const isMaster = isMasterAdmin(u.email);
 
           const newProfile = {
             uid: u.uid,
             email: u.email,
             userName: u.displayName || '신규 사용자',
-            role: isMasterAdmin ? 'admin' : 'staff',
-            status: isMasterAdmin ? 'approved' : 'pending',
-            department: isMasterAdmin ? '인사팀' : '미지정',
+            role: isMaster ? 'admin' : 'staff',
+            status: isMaster ? 'approved' : 'pending',
+            department: isMaster ? '인사팀' : '미지정',
             vehicleName: '',
             fuelType: 'gasoline',
             homeAddress: '',
@@ -177,7 +178,13 @@ const App = () => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       showStatus("로그인 성공!");
-    } catch { showStatus("로그인 실패", 'error'); }
+    } catch (err) { 
+      let msg = "로그인 실패";
+      if (err.code === 'auth/user-not-found') msg = "등록되지 않은 이메일입니다.";
+      else if (err.code === 'auth/wrong-password') msg = "비밀번호가 올바르지 않습니다.";
+      else if (err.code === 'auth/invalid-email') msg = "이메일 형식이 올바르지 않습니다.";
+      showStatus(msg, 'error'); 
+    }
   };
 
   const signup = async (email, password, userName) => {
@@ -185,21 +192,18 @@ const App = () => {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const u = cred.user;
       
-      // Firebase Auth 프로필 업데이트 (이미지나 다른 서비스 연동 대비)
       await updateAuthProfile(u, { displayName: userName });
 
-      // Firestore 프로필 즉시 생성 (신규 사용자 이름 누락 방지)
       const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', u.uid);
-      const adminEmails = ['esc913@composecoffee.co.kr', 'choihy@composecoffee.co.kr'];
-      const isMasterAdmin = adminEmails.includes(u.email);
+      const isMaster = isMasterAdmin(u.email);
 
       const newProfile = {
         uid: u.uid,
         email: u.email,
-        userName: userName, // 폼에서 입력받은 이름을 직접 사용
-        role: isMasterAdmin ? 'admin' : 'staff',
-        status: isMasterAdmin ? 'approved' : 'pending',
-        department: isMasterAdmin ? '인사팀' : '미지정',
+        userName: userName,
+        role: isMaster ? 'admin' : 'staff',
+        status: isMaster ? 'approved' : 'pending',
+        department: isMaster ? '인사팀' : '미지정',
         vehicleName: '',
         fuelType: 'gasoline',
         homeAddress: '',
@@ -209,10 +213,19 @@ const App = () => {
       
       await setDoc(userDocRef, newProfile);
       setProfile(newProfile);
-      showStatus("가입 신청 완료! 승인 대기 중입니다.");
+      
+      if (isMaster) {
+        showStatus("관리자 계정으로 자동 승인되었습니다.");
+      } else {
+        showStatus("가입 신청 완료! 승인 대기 중입니다.");
+      }
     } catch (err) { 
       console.error(err);
-      showStatus("회원가입 실패", 'error'); 
+      let msg = "회원가입 실패";
+      if (err.code === 'auth/email-already-in-use') msg = "이미 사용 중인 이메일입니다. 로그인해 주세요.";
+      else if (err.code === 'auth/weak-password') msg = "비밀번호는 6자리 이상이어야 합니다.";
+      else if (err.code === 'auth/invalid-email') msg = "이메일 형식이 올바르지 않습니다.";
+      showStatus(msg, 'error'); 
     }
   };
 
@@ -258,8 +271,7 @@ const App = () => {
   if (!user) return <AuthScreen onLogin={login} onSignup={signup} />;
   
   // 마스터 관리자 이메일 체크
-  const adminEmails = ['esc913@composecoffee.co.kr', 'choihy@composecoffee.co.kr'];
-  const isAdmin = profile?.role === 'admin' || adminEmails.includes(user?.email); 
+  const isAdmin = profile?.role === 'admin' || isMasterAdmin(user?.email); 
 
   if (!isAdmin && profile?.status === 'pending') {
     return (
@@ -285,17 +297,24 @@ const App = () => {
         isCollapsed={isSidebarCollapsed}
         onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
-      <div className={`flex-1 transition-all duration-500 ease-in-out ${isSidebarCollapsed ? 'lg:ml-24' : 'lg:ml-80'} p-6 lg:p-12`}>
-        <header className="flex justify-between items-center mb-12">
+      <div className={`flex-1 transition-all duration-500 ease-in-out ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-72'} min-h-screen`}>
+        <div className="p-6 lg:p-10 max-w-7xl mx-auto">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10 animate-fade-in">
           <div>
-            <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] block mb-2">SYSTEM › {view.toUpperCase()}</span>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-              {view === 'dashboard' ? '대시보드' : view === 'log' ? '신규 내역' : view === 'history' ? '정산 내역' : view === 'reports' ? '운행 리포트' : view === 'settings' ? '기준 설정' : view === 'admin' ? '인사 관리' : '개인 설정'}
+            <div className="flex items-center gap-2 mb-1">
+              <span className="h-px w-8 bg-indigo-500 rounded-full"></span>
+              <span className="text-[11px] font-black text-indigo-500 uppercase tracking-[0.3em]">SYSTEM › {view.toUpperCase()}</span>
+            </div>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">
+              {view === 'dashboard' ? '대시보드' : view === 'log' ? '신규 운행 내역' : view === 'history' ? '정산 및 내역' : view === 'reports' ? '통계 리포트' : view === 'settings' ? '환경 설정' : view === 'admin' ? '인사 관리' : '내 프로필'}
             </h1>
           </div>
-          <button className="flex items-center gap-2 bg-white px-6 py-4 rounded-2xl border border-slate-100 text-slate-500 font-bold shadow-sm hover:shadow-md transition-all active:scale-95">
-            <Download size={20} /> <span className="hidden md:inline">레포트 출력</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button className="flex items-center gap-2 bg-white px-5 py-3 rounded-2xl border border-slate-100 text-slate-600 font-bold shadow-sm hover:shadow-md hover:border-indigo-100 transition-all active:scale-95">
+              <Download size={18} className="text-indigo-500" /> 
+              <span className="text-sm">데이터 내보내기</span>
+            </button>
+          </div>
         </header>
         <main className="max-w-7xl">
           {statusMessage && (
@@ -313,6 +332,7 @@ const App = () => {
         </main>
       </div>
     </div>
+   </div>
   );
 };
 
@@ -321,17 +341,19 @@ const App = () => {
 const NavItem = ({ icon, label, active, onClick, isCollapsed }) => (
   <button 
     onClick={onClick}
-    className={`w-full flex items-center gap-3 ${isCollapsed ? 'px-0 justify-center' : 'px-5'} py-4 rounded-2xl text-sm font-bold transition-all duration-300 group relative ${
+    className={`w-full flex items-center gap-3 ${isCollapsed ? 'px-0 justify-center' : 'px-4'} py-3.5 rounded-2xl text-[13px] font-bold transition-all duration-300 group relative ${
       active 
-      ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' 
-      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-    } ${active && !isCollapsed ? 'translate-x-1' : ''}`}
+      ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' 
+      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+    }`}
     title={isCollapsed ? label : ''}
   >
-    <span className={`${active ? 'text-white' : 'text-slate-400 group-hover:text-blue-500'} transition-colors shrink-0`}>{icon}</span>
+    <span className={`${active ? 'text-white' : 'text-slate-400 group-hover:text-indigo-500 transition-transform duration-300 group-hover:scale-110'} shrink-0`}>
+      {React.cloneElement(icon, { size: 20 })}
+    </span>
     {!isCollapsed && <span className="whitespace-nowrap overflow-hidden transition-all duration-300">{label}</span>}
     {active && !isCollapsed && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white opacity-40"></div>}
-    {active && isCollapsed && <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white rounded-l-full opacity-60"></div>}
+    {active && isCollapsed && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white rounded-r-full opacity-60"></div>}
   </button>
 );
 
@@ -371,26 +393,26 @@ const Dashboard = ({ logs }) => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
         <div>
-          <h3 className="text-xl font-black text-slate-800">조직 운행 통계</h3>
-          <p className="text-sm font-bold text-slate-400">선택하신 월의 전체 정산 현황입니다.</p>
+          <h3 className="text-xl font-black text-slate-800 tracking-tight">종합 운행 데이터</h3>
+          <p className="text-sm font-medium text-slate-400">시스템에 동기화된 전체 정산 현황입니다.</p>
         </div>
-        <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl border border-slate-100 shadow-sm">
-          <Calendar size={18} className="text-blue-600" />
+        <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 ring-indigo-50 transition-all">
+          <Calendar size={16} className="text-indigo-500" />
           <input 
             type="month" 
-            className="bg-transparent font-black text-slate-700 outline-none cursor-pointer text-sm"
+            className="bg-transparent font-bold text-slate-700 outline-none cursor-pointer text-sm"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <StatCard title="총 정산 금액" value={`${stats.totalAmount.toLocaleString()}원`} subtitle="당월 지급 예정 합계" icon={<Calculator size={24}/>} color="blue" />
-        <StatCard title="총 누적 거리" value={`${stats.totalDist.toFixed(1)}km`} subtitle="업무용 운행 전체 거리" icon={<Navigation size={24}/>} color="emerald" />
-        <StatCard title="기록된 데이터" value={`${stats.count}건`} subtitle="서버 동기화된 내역" icon={<History size={24}/>} color="amber" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-slide-up">
+        <StatCard title="총 정산 금액" value={`${stats.totalAmount.toLocaleString()}원`} subtitle="당월 지급 예정 합계" icon={<Calculator />} color="indigo" />
+        <StatCard title="총 누적 거리" value={`${stats.totalDist.toFixed(1)}km`} subtitle="업무용 운행 전체 거리" icon={<Navigation />} color="emerald" />
+        <StatCard title="정산 건수" value={`${stats.count}건`} subtitle="정상 승인된 내역 개수" icon={<History />} color="amber" />
       </div>
 
       <div className="grid grid-cols-1 gap-8">
@@ -432,25 +454,33 @@ const Dashboard = ({ logs }) => {
   );
 };
 
-const StatCard = ({ title, value, icon, subtitle }) => (
-  <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col relative overflow-hidden group hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300">
-    <div className="flex items-start justify-between z-10">
-      <div>
-        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{title}</p>
-        <h4 className="text-xl font-black text-slate-900 tracking-tight">{value}</h4>
+const StatCard = ({ title, value, icon, subtitle, color }) => {
+  const colorMap = {
+    indigo: 'bg-indigo-50 text-indigo-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    amber: 'bg-amber-50 text-amber-600'
+  };
+
+  return (
+    <div className="premium-card p-6 rounded-[2rem] flex flex-col relative overflow-hidden group">
+      <div className="flex items-start justify-between z-10">
+        <div>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</p>
+          <h4 className="text-2xl font-black text-slate-900 tracking-tight">{value}</h4>
+        </div>
+        <div className={`p-3.5 rounded-2xl group-hover:scale-110 transition-all duration-500 ${colorMap[color] || 'bg-slate-50 text-slate-400'}`}>
+          {React.cloneElement(icon, { size: 20 })}
+        </div>
       </div>
-      <div className="p-3 bg-slate-50 rounded-2xl group-hover:scale-110 group-hover:bg-slate-100 transition-all duration-300">
-        {React.cloneElement(icon, { size: 18 })}
+      <div className="mt-5 flex items-center gap-2 z-10">
+        <div className={`w-1 h-1 rounded-full ${color === 'indigo' ? 'bg-indigo-400' : color === 'emerald' ? 'bg-emerald-400' : 'bg-amber-400'}`}></div>
+        <p className="text-[11px] font-semibold text-slate-400">{subtitle}</p>
       </div>
+      {/* Subtle background decoration */}
+      <div className="absolute -bottom-10 -right-10 w-28 h-28 bg-slate-50/50 rounded-full blur-2xl group-hover:scale-150 transition-all duration-700"></div>
     </div>
-    <div className="mt-4 flex items-center gap-2 z-10">
-      <div className="w-1 h-1 rounded-full bg-blue-500"></div>
-      <p className="text-[10px] font-bold text-slate-400">{subtitle}</p>
-    </div>
-    {/* Subtle background decoration */}
-    <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-slate-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-  </div>
-);
+  );
+};
 
 const EmptyChart = ({ message }) => (
   <div className="w-full h-full flex flex-col items-center justify-center gap-3">
@@ -567,6 +597,32 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
   };
 
   const handleQuickSelect = (index, location) => {
+    // 저장된 장소가 이미 좌표를 가지고 있더라도, 정확도를 위해 다시 한번 지오코딩을 수행하는 것이 안전함
+    // 특히 기존에 잘못 저장된(더미) 좌표가 있을 수 있으므로 주소를 기반으로 새로 검색함
+    if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+      const geocoder = new window.kakao.maps.services.Geocoder();
+      geocoder.addressSearch(location.address, (result, status) => {
+        if (status === window.kakao.maps.services.Status.OK) {
+          const newWaypoints = [...formData.waypoints];
+          newWaypoints[index] = {
+            ...newWaypoints[index],
+            address: location.address,
+            alias: location.name,
+            lat: parseFloat(result[0].y),
+            lng: parseFloat(result[0].x)
+          };
+          setFormData(prev => ({ ...prev, waypoints: newWaypoints }));
+        } else {
+          // 실패 시 기존 정보라도 활용
+          applyQuickSelectDirectly(index, location);
+        }
+      });
+    } else {
+      applyQuickSelectDirectly(index, location);
+    }
+  };
+
+  const applyQuickSelectDirectly = (index, location) => {
     const newWaypoints = [...formData.waypoints];
     newWaypoints[index] = {
       ...newWaypoints[index],
@@ -575,7 +631,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
       lat: location.lat || 37.5,
       lng: location.lng || 127.0
     };
-    setFormData({ ...formData, waypoints: newWaypoints });
+    setFormData(prev => ({ ...prev, waypoints: newWaypoints }));
   };
 
   const handleAliasChange = (index, value) => {
@@ -675,7 +731,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
              </button>
           </div>
           
-          <div className="space-y-6">
+          <div className="space-y-4">
             {formData.waypoints.map((wp, idx) => (
               <div key={wp.id} className="animate-fade-in group space-y-2">
                 <div className="flex flex-wrap gap-2 ml-1">
@@ -683,7 +739,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                     <button 
                       type="button" 
                       onClick={() => handleQuickSelect(idx, { name: profile.homeAlias || '우리집', address: profile.homeAddress, lat: profile.homeLat, lng: profile.homeLng })}
-                      className="group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-lg shadow-blue-100 hover:bg-blue-700 hover:-translate-y-0.5 transition-all"
+                      className="group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-600 text-white text-[10px] font-black shadow-lg shadow-indigo-100/50 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all"
                     >
                       <span className="opacity-80">🏠</span>
                       <span>{profile.homeAlias || '우리집'}</span>
@@ -694,39 +750,39 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                       key={loc.id}
                       type="button" 
                       onClick={() => handleQuickSelect(idx, loc)}
-                      className="group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-700 text-[10px] font-black shadow-sm hover:border-slate-900 hover:bg-slate-900 hover:text-white hover:-translate-y-0.5 transition-all"
+                      className="group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-700 text-[10px] font-black shadow-sm hover:border-indigo-500 hover:text-indigo-600 hover:-translate-y-0.5 transition-all"
                     >
-                      <span className="text-blue-500 group-hover/btn:text-white opacity-80">📍</span>
+                      <span className="text-indigo-500 opacity-80">📍</span>
                       <span>{loc.name}</span>
                     </button>
                   ))}
                 </div>
-                <div className="flex gap-3 items-center flex-nowrap">
+                <div className="flex gap-3 items-center">
                   <div className="flex-[2] relative">
                     <input 
                       type="text" 
                       placeholder={`${wp.label} 주소 검색`} 
                       readOnly
                       onClick={() => openSearch(idx)}
-                      className="w-full max-w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-200 group-hover:border-blue-200 cursor-pointer focus:bg-white focus:ring-4 focus:ring-blue-50/50 outline-none transition-all font-bold text-slate-700 truncate overflow-hidden"
+                      className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 group-hover:border-indigo-200 cursor-pointer focus:bg-white focus:ring-4 focus:ring-indigo-50/50 outline-none transition-all font-bold text-slate-700 truncate"
                       value={wp.address}
                     />
                     {!wp.address && (
-                      <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-blue-500 pointer-events-none opacity-60">검색</span>
+                      <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-500 pointer-events-none opacity-60">검색</span>
                     )}
                   </div>
                   <div className="flex-1 relative">
                     <input 
                       type="text" 
-                      placeholder="명칭 (필수입력)" 
+                      placeholder="명칭 (필수)" 
                       className={`w-full px-5 py-4 rounded-2xl bg-slate-50 border-2 outline-none transition-all font-bold text-sm ${
-                        wp.alias ? 'border-slate-100 text-slate-600 focus:border-blue-400' : 'border-red-100 text-red-500 focus:border-red-300'
-                      } truncate overflow-hidden`}
+                        wp.alias ? 'border-transparent text-slate-600 focus:border-indigo-400 focus:bg-white' : 'border-red-50 text-red-500 focus:border-red-200'
+                      } truncate`}
                       value={wp.alias}
                       onChange={(e) => handleAliasChange(idx, e.target.value)}
                     />
                     {!wp.alias && (
-                      <span className="absolute -top-6 right-1 text-[9px] font-black text-red-500 animate-pulse">명칭 기입 필수</span>
+                      <span className="absolute -top-6 right-1 text-[9px] font-black text-red-500 animate-pulse">필수</span>
                     )}
                   </div>
 
@@ -734,7 +790,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                     <button 
                       type="button" 
                       onClick={() => removeStop(idx)}
-                      className="p-3 text-slate-300 hover:text-red-500 transition-colors"
+                      className="p-3 text-slate-300 hover:text-red-500 transition-all active:scale-90"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -759,18 +815,18 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
           </InputGroup>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 premium-card p-8 rounded-[2.5rem]">
           <div className="flex flex-col justify-center">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Total Distance</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Total Distance</p>
               <button 
                 type="button"
                 onClick={() => setFormData(prev => ({ ...prev, isManualDistance: !prev.isManualDistance }))}
-                className={`text-[9px] font-black px-2 py-1 rounded-md transition-all ${
-                  formData.isManualDistance ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'
+                className={`text-[10px] font-black px-3 py-1.5 rounded-xl transition-all ${
+                  formData.isManualDistance ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-100 text-slate-400 border border-slate-100'
                 }`}
               >
-                {formData.isManualDistance ? '수동 입력 중' : '자동 계산 중'}
+                {formData.isManualDistance ? '수동 보정 활성' : '수동 입력 전환'}
               </button>
             </div>
             <div className="flex items-baseline gap-1">
@@ -779,39 +835,44 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                   <input 
                     type="number"
                     step="0.1"
-                    className="w-24 text-2xl font-black text-blue-600 bg-white border-b-2 border-blue-400 outline-none px-1"
+                    className="w-24 text-3xl font-black text-indigo-600 bg-transparent border-b-4 border-indigo-400 outline-none px-1"
                     value={formData.distance}
                     onChange={(e) => setFormData(prev => ({ ...prev, distance: parseFloat(e.target.value) || 0 }))}
                   />
-                  <span className="text-sm font-bold text-slate-400">km</span>
+                  <span className="text-base font-black text-slate-400">km</span>
                 </div>
               ) : (
-                <div className="text-2xl font-black text-slate-800 flex items-baseline gap-1">
-                  {formData.distance} <span className="text-sm">km</span>
+                <div className="text-4xl font-black text-slate-900 flex items-baseline gap-1 tracking-tight">
+                  {formData.distance} <span className="text-lg text-slate-400">km</span>
                 </div>
               )}
             </div>
-            <p className="text-[10px] text-slate-400 mt-1 px-1">
-              {formData.isManualDistance ? '실제 계기판 거리를 입력하세요.' : '좌표 기반 직선 거리(보정치 포함)'}
+            <p className="text-[11px] font-medium text-slate-400 mt-2 px-1">
+              {formData.isManualDistance ? '실제 계기판 거리를 직접 입력하세요.' : '시스템 자동 산출 직선 거리 (도로 보정 1.25x 적용)'}
             </p>
           </div>
-          <div className="p-6 rounded-2xl bg-blue-600 shadow-xl shadow-blue-200 border border-blue-500 text-white flex justify-between items-center transition-all duration-300 hover:scale-[1.02]">
+          <div className="p-8 rounded-3xl bg-premium-gradient shadow-2xl shadow-indigo-200 text-white flex justify-between items-center transition-all duration-500 hover:scale-[1.02]">
             <div>
-              <p className="text-[9px] font-black uppercase tracking-widest opacity-80 mb-1">Total Expected Amount</p>
-              <h4 className="text-2xl font-black">{calculatedAmount.toLocaleString()}<span className="text-sm ml-1 font-bold">원</span></h4>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-1">Expected Amount</p>
+              <h4 className="text-3xl font-black">{calculatedAmount.toLocaleString()}<span className="text-base ml-1.5 opacity-60">원</span></h4>
             </div>
-            <div className="p-3 bg-white/20 rounded-xl"><Calculator size={24} className="opacity-80" /></div>
+            <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 self-center">
+              <Calculator size={28} className="opacity-90" />
+            </div>
           </div>
         </div>
 
         <button 
           type="submit" 
           disabled={!isFormValid}
-          className={`w-full py-5 rounded-2xl font-black text-lg transition-all shadow-xl flex items-center justify-center gap-3 active:scale-[0.98] ${
-            isFormValid ? 'bg-slate-900 text-white shadow-slate-200 hover:bg-slate-800' : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'
+          className={`w-full py-6 rounded-2xl font-black text-lg transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-[0.98] ${
+            isFormValid 
+            ? 'bg-slate-900 text-white shadow-indigo-100 hover:bg-black' 
+            : 'bg-slate-100 text-slate-300 cursor-not-allowed'
           }`}
         >
-          <PlusCircle size={22} /> {formData.distance > 0 ? '전체 정산 내역 기록하기' : '주소를 입력해 주세요'}
+          <PlusCircle size={22} /> 
+          {formData.distance > 0 ? '전체 정산 데이터 기록 완료하기' : '주소와 장소명을 입력해 주세요'}
         </button>
       </form>
     </div>
@@ -820,8 +881,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
 
 const InputGroup = ({ label, icon, children }) => (
   <div className="space-y-3">
-    <label className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest px-1">
-      <span className="text-blue-500">{icon}</span>
+    <label className="flex items-center gap-2 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] px-1 group-focus-within:text-indigo-500 transition-colors">
+      <span className="text-indigo-400 group-focus-within:animate-pulse">{icon}</span>
       {label}
     </label>
     {children}
@@ -830,25 +891,27 @@ const InputGroup = ({ label, icon, children }) => (
 
 const HistoryTable = ({ logs, onDelete }) => {
   return (
-    <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+    <div className="premium-card rounded-[2.5rem] overflow-hidden animate-fade-in">
       <div className="overflow-x-auto">
         <table className="w-full text-left table-fixed">
-          <thead className="bg-slate-50 border-b border-slate-100">
+          <thead className="bg-slate-50/50 border-b border-slate-100">
             <tr>
-              <th className="w-[140px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">운행 정보</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">운행 경로 및 목적</th>
-              <th className="w-[120px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">구간 및 유종</th>
-              <th className="w-[140px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">정산 금액</th>
-              <th className="w-[80px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">작업</th>
+              <th className="w-[180px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">운행 정보</th>
+              <th className="px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">운행 경로 및 목적</th>
+              <th className="w-[180px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-right whitespace-nowrap">구간 및 유종</th>
+              <th className="w-[180px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-right whitespace-nowrap">정산 금액</th>
+              <th className="w-[100px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-center whitespace-nowrap">작업</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
             {logs.length === 0 ? (
               <tr>
-                <td colSpan="5" className="px-8 py-20 text-center">
-                  <div className="flex flex-col items-center gap-4">
-                    <History size={48} className="text-slate-200" />
-                    <p className="text-slate-400 font-bold">기록된 운행 내역이 없습니다.</p>
+                <td colSpan="5" className="px-8 py-24 text-center">
+                  <div className="flex flex-col items-center gap-5">
+                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-200">
+                      <History size={32} />
+                    </div>
+                    <p className="text-slate-400 font-bold">아직 기록된 운행 내역이 없습니다.</p>
                   </div>
                 </td>
               </tr>
@@ -856,49 +919,52 @@ const HistoryTable = ({ logs, onDelete }) => {
               logs.map((log) => (
                 <tr key={log.id} className="group hover:bg-slate-50/50 transition-all border-b border-slate-50 last:border-0">
                   <td className="px-8 py-7">
-                    <div className="font-black text-slate-900 text-sm">{log.date}</div>
-                    <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 mt-1.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>
+                    <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.date}</div>
+                    <div className="text-[11px] font-bold text-slate-400 flex items-center gap-2 mt-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
                       {log.userName}
                     </div>
                   </td>
                   <td className="px-8 py-7">
-                    <div className="text-xs font-black text-slate-700 flex flex-wrap items-center gap-1 leading-relaxed max-w-xl">
+                    <div className="text-[13px] font-bold text-slate-700 flex flex-wrap items-center gap-1.5 leading-relaxed max-w-xl">
                       {log.routeSummary ? (
                         log.routeSummary.split(' → ').map((stop, sIdx, arr) => (
                           <React.Fragment key={sIdx}>
-                            <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px]">{stop}</span>
-                            {sIdx < arr.length - 1 && <ChevronRight size={10} className="text-slate-300 shrink-0" />}
+                            <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500 whitespace-nowrap">{stop}</span>
+                            {sIdx < arr.length - 1 && <ChevronRight size={10} className="text-slate-300 shrink-0 mx-0.5" />}
                           </React.Fragment>
                         ))
                       ) : (
-                        <>
-                          {log.departure} <ChevronRight size={12} className="text-slate-300" /> {log.destination}
-                        </>
+                        <div className="flex items-center gap-2">
+                          <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500">{log.departure}</span>
+                          <ChevronRight size={12} className="text-slate-300" /> 
+                          <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500">{log.destination}</span>
+                        </div>
                       )}
                     </div>
                     {log.purpose && (
-                      <div className="text-[10px] font-bold text-blue-500/70 mt-2 bg-blue-50/50 px-2 py-0.5 rounded inline-block">
-                        • {log.purpose}
+                      <div className="text-[10px] font-black text-indigo-500 mt-2.5 bg-indigo-50/50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5">
+                        <FileText size={10} />
+                        {log.purpose}
                       </div>
                     )}
                   </td>
                   <td className="px-8 py-7 text-right">
                     <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.distance} <span className="text-[10px] font-bold text-slate-400">km</span></div>
-                    <div className={`text-[8px] px-2 py-0.5 rounded-md font-black mt-1.5 inline-block uppercase tracking-tighter ${
-                      log.fuelType === 'gasoline' ? 'bg-blue-50 text-blue-600' : 
+                    <div className={`text-[10px] px-2 py-1 rounded-lg font-black mt-2 inline-block uppercase tracking-tight ${
+                      log.fuelType === 'gasoline' ? 'bg-indigo-50 text-indigo-600' : 
                       log.fuelType === 'diesel' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
                     }`}>
                       {log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG'}
                     </div>
                   </td>
                   <td className="px-8 py-7 text-right">
-                    <div className="font-black text-blue-600 text-base whitespace-nowrap">{Number(log.amount || 0).toLocaleString()} <span className="text-[10px] font-bold opacity-70">원</span></div>
+                    <div className="font-black text-indigo-600 text-[17px] whitespace-nowrap tracking-tight">{Number(log.amount || 0).toLocaleString()} <span className="text-[11px] font-bold opacity-60">원</span></div>
                   </td>
                   <td className="px-8 py-7 text-center">
                     <button 
                       onClick={() => onDelete(log.id)}
-                      className="p-2.5 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90"
+                      className="p-3 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all active:scale-90"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -1029,14 +1095,30 @@ const MyPage = ({ profile, onUpdate }) => {
   const openHomeSearch = () => {
     new window.daum.Postcode({
       oncomplete: function(data) {
-        setLocalProfile(prev => ({
-          ...prev,
-          homeAddress: data.address,
-          // 중요: 기존 별칭을 절대 덮어쓰지 않고 유지함
-          homeAlias: prev.homeAlias || '우리집',
-          homeLat: 37.5 + (data.address.length % 100) / 500,
-          homeLng: 126.0 + (data.address.length % 100) / 500
-        }));
+        const fullAddress = data.address;
+        
+        if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+          const geocoder = new window.kakao.maps.services.Geocoder();
+          geocoder.addressSearch(fullAddress, (result, status) => {
+            if (status === window.kakao.maps.services.Status.OK) {
+              setLocalProfile(prev => ({
+                ...prev,
+                homeAddress: fullAddress,
+                homeAlias: prev.homeAlias || '우리집',
+                homeLat: parseFloat(result[0].y),
+                homeLng: parseFloat(result[0].x)
+              }));
+            }
+          });
+        } else {
+          setLocalProfile(prev => ({
+            ...prev,
+            homeAddress: fullAddress,
+            homeAlias: prev.homeAlias || '우리집',
+            homeLat: 37.5,
+            homeLng: 126.9
+          }));
+        }
       }
     }).open();
   };
@@ -1098,17 +1180,27 @@ const MyPage = ({ profile, onUpdate }) => {
               onClick={() => {
                 new window.daum.Postcode({
                   oncomplete: function(data) {
-                    const newLoc = {
-                      id: Date.now(),
-                      name: data.buildingName || data.bname || '새 장소',
-                      address: data.address,
-                      lat: 37.5 + (data.address.length % 100) / 500,
-                      lng: 127.0 + (data.address.length % 100) / 500
-                    };
-                    setLocalProfile({
-                       ...localProfile,
-                       savedLocations: [...(localProfile.savedLocations || []), newLoc]
-                    });
+                    const fullAddress = data.address;
+                    const placeName = data.buildingName || data.bname || '새 장소';
+
+                    if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+                      const geocoder = new window.kakao.maps.services.Geocoder();
+                      geocoder.addressSearch(fullAddress, (result, status) => {
+                        if (status === window.kakao.maps.services.Status.OK) {
+                          const newLoc = {
+                            id: Date.now(),
+                            name: placeName,
+                            address: fullAddress,
+                            lat: parseFloat(result[0].y),
+                            lng: parseFloat(result[0].x)
+                          };
+                          setLocalProfile(prev => ({
+                             ...prev,
+                             savedLocations: [...(prev.savedLocations || []), newLoc]
+                          }));
+                        }
+                      });
+                    }
                   }
                 }).open();
               }}
@@ -1127,14 +1219,14 @@ const MyPage = ({ profile, onUpdate }) => {
                localProfile.savedLocations.map((loc) => (
                  <div key={loc.id} className="flex items-center justify-between p-5 bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
                    <div className="flex items-center gap-4 flex-1">
-                     <div className="p-3 bg-slate-50 rounded-2xl text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
-                       <MapPin size={20} />
-                     </div>
+                      <div className="p-3 bg-slate-50 rounded-2xl text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors">
+                        <MapPin size={20} />
+                      </div>
                      <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <div className="relative flex-1 max-w-[240px]">
                             <input 
-                              className="w-full text-base font-black text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+                              className="w-full text-base font-black text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 outline-none transition-all"
                               value={loc.name}
                               placeholder="예: 회사, 본사"
                               onChange={(e) => {
@@ -1143,7 +1235,7 @@ const MyPage = ({ profile, onUpdate }) => {
                               }}
                             />
                             <div className="absolute -top-4 left-1">
-                               <p className="text-[9px] font-black text-blue-500 uppercase tracking-tighter opacity-70">명칭 수정 가능</p>
+                               <p className="text-[9px] font-black text-indigo-500 uppercase tracking-tighter opacity-70">명칭 수정 가능</p>
                             </div>
                           </div>
                         </div>
@@ -1167,37 +1259,37 @@ const MyPage = ({ profile, onUpdate }) => {
 
         <section className="space-y-6">
           <div className="flex items-center gap-2 px-1">
-            <Fuel size={18} className="text-blue-500" />
+            <Fuel size={18} className="text-indigo-500" />
             <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">차량 및 주종 정보</h4>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <InputGroup label="차량 별명 (ex: 내 차, 소나타)" icon={<Car size={14}/>}>
-               <input 
-                 type="text" 
-                 className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 outline-none transition-all font-bold text-slate-700"
-                 placeholder="예: 제네시스"
-                 value={localProfile.vehicleName}
-                 onChange={(e) => setLocalProfile({...localProfile, vehicleName: e.target.value})}
-               />
-            </InputGroup>
-            <InputGroup label="기본 유종 설정" icon={<Fuel size={14}/>}>
-               <select 
-                 className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 outline-none transition-all font-bold text-slate-700"
-                 value={localProfile.fuelType}
-                 onChange={(e) => setLocalProfile({...localProfile, fuelType: e.target.value})}
-               >
-                 <option value="gasoline">휘발유 (Gasoline)</option>
-                 <option value="diesel">경유 (Diesel)</option>
-                 <option value="lpg">액화석유가스 (LPG)</option>
-               </select>
-            </InputGroup>
+             <InputGroup label="차량 별명 (ex: 내 차, 소나타)" icon={<Car size={14}/>}>
+                <input 
+                  type="text" 
+                  className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700"
+                  placeholder="예: 제네시스"
+                  value={localProfile.vehicleName}
+                  onChange={(e) => setLocalProfile({...localProfile, vehicleName: e.target.value})}
+                />
+             </InputGroup>
+             <InputGroup label="기본 유종 설정" icon={<Fuel size={14}/>}>
+                <select 
+                  className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700"
+                  value={localProfile.fuelType}
+                  onChange={(e) => setLocalProfile({...localProfile, fuelType: e.target.value})}
+                >
+                  <option value="gasoline">휘발유 (Gasoline)</option>
+                  <option value="diesel">경유 (Diesel)</option>
+                  <option value="lpg">액화석유가스 (LPG)</option>
+                </select>
+             </InputGroup>
           </div>
         </section>
 
         <div className="pt-6 border-t border-slate-50">
           <button 
             onClick={() => onUpdate(localProfile)}
-            className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95"
+            className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
           >
             개인 설정값 저장하기
           </button>
@@ -1210,25 +1302,25 @@ const MyPage = ({ profile, onUpdate }) => {
 // --- Enhanced Components ---
 
 const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCollapsed, onToggle }) => (
-  <nav className={`fixed bottom-0 lg:top-0 left-0 w-full ${isCollapsed ? 'lg:w-24' : 'lg:w-80'} bg-white border-t lg:border-t-0 lg:border-r border-slate-100 flex lg:flex-col p-4 lg:p-6 z-50 transition-all duration-500 ease-in-out`}>
+  <nav className={`fixed bottom-0 lg:top-0 left-0 w-full ${isCollapsed ? 'lg:w-20' : 'lg:w-72'} bg-white border-t lg:border-t-0 lg:border-r border-slate-100 flex lg:flex-col p-4 lg:p-6 z-50 transition-all duration-500 ease-in-out`}>
     <div className={`hidden lg:flex items-center ${isCollapsed ? 'justify-center mb-10' : 'justify-between mb-12 px-2'}`}>
       <div className="flex items-center gap-4">
-        <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-100 shrink-0">
-          <Car size={24} strokeWidth={3} />
+        <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100 shrink-0">
+          <Car size={20} strokeWidth={3} />
         </div>
         {!isCollapsed && (
           <div className="animate-fade-in">
-            <h1 className="text-xl font-black text-slate-800 tracking-tight">C-OIL</h1>
-            <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none mt-1">Reimbursement</p>
+            <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">C-OIL</h1>
+            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none mt-1">Platform</p>
           </div>
         )}
       </div>
       {!isCollapsed && (
         <button 
           onClick={onToggle}
-          className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-100 hover:text-blue-600 transition-all"
+          className="p-1.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"
         >
-          <PanelLeftClose size={20} />
+          <PanelLeftClose size={16} />
         </button>
       )}
     </div>
@@ -1236,32 +1328,31 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
     {isCollapsed && (
       <button 
         onClick={onToggle}
-        className="hidden lg:flex items-center justify-center p-3 mb-8 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+        className="hidden lg:flex items-center justify-center p-3 mb-8 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
       >
-        <PanelLeftOpen size={20} />
+        <PanelLeftOpen size={18} />
       </button>
     )}
 
-    <div className="flex lg:flex-col flex-1 gap-1 lg:gap-2 overflow-hidden">
-      <NavItem isCollapsed={isCollapsed} icon={<LayoutDashboard size={20}/>} label="대시보드" active={currentView === 'dashboard'} onClick={() => onNavigate('dashboard')} />
-      <NavItem isCollapsed={isCollapsed} icon={<PlusCircle size={20}/>} label="신규 내역" active={currentView === 'log'} onClick={() => onNavigate('log')} />
-      <NavItem isCollapsed={isCollapsed} icon={<History size={20}/>} label="정산 내역" active={currentView === 'history'} onClick={() => onNavigate('history')} />
+    <div className="flex lg:flex-col flex-1 gap-1 lg:gap-2">
+      <NavItem isCollapsed={isCollapsed} icon={<LayoutDashboard />} label="대시보드" active={currentView === 'dashboard'} onClick={() => onNavigate('dashboard')} />
+      <NavItem isCollapsed={isCollapsed} icon={<PlusCircle />} label="신규 운행" active={currentView === 'log'} onClick={() => onNavigate('log')} />
+      <NavItem isCollapsed={isCollapsed} icon={<History />} label="정산 내역" active={currentView === 'history'} onClick={() => onNavigate('history')} />
       {isAdmin && (
         <>
-          <div className={`hidden lg:block h-px bg-slate-50 my-2 ${isCollapsed ? 'mx-2' : 'mx-4'}`}></div>
-          <NavItem isCollapsed={isCollapsed} icon={<FileText size={20}/>} label="운행 리포트" active={currentView === 'reports'} onClick={() => onNavigate('reports')} />
-          <NavItem isCollapsed={isCollapsed} icon={<Settings size={20}/>} label="단가 설정" active={currentView === 'settings'} onClick={() => onNavigate('settings')} />
-          <NavItem isCollapsed={isCollapsed} icon={<Users size={20}/>} label="인사 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} />
+          <div className={`hidden lg:block h-px bg-slate-100 my-3 ${isCollapsed ? 'mx-2' : 'mx-4'}`}></div>
+          <NavItem isCollapsed={isCollapsed} icon={<FileText />} label="운행 통계" active={currentView === 'reports'} onClick={() => onNavigate('reports')} />
+          <NavItem isCollapsed={isCollapsed} icon={<Settings />} label="기준 단가" active={currentView === 'settings'} onClick={() => onNavigate('settings')} />
+          <NavItem isCollapsed={isCollapsed} icon={<Users />} label="인사 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} />
         </>
       )}
       <div className="flex-1 hidden lg:block"></div>
-      <NavItem isCollapsed={isCollapsed} icon={<UserCircle size={20}/>} label="마이페이지" active={currentView === 'profile'} onClick={() => onNavigate('profile')} />
+      <NavItem isCollapsed={isCollapsed} icon={<UserCircle />} label="내 정보" active={currentView === 'profile'} onClick={() => onNavigate('profile')} />
       <button 
         onClick={onLogout}
-        className={`hidden lg:flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-5'} py-4 rounded-2xl text-sm font-bold text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all mt-4`}
-        title={isCollapsed ? "로그아웃" : ""}
+        className={`hidden lg:flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-5'} py-4 rounded-2xl text-[13px] font-bold text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all mt-4`}
       >
-        <LogOut size={20} className="shrink-0" /> {!isCollapsed && <span>로그아웃</span>}
+        {isCollapsed ? <LogOut size={20} /> : <><LogOut size={16} /> <span>로그아웃</span></>}
       </button>
     </div>
   </nav>
@@ -1274,70 +1365,165 @@ const AuthScreen = ({ onLogin, onSignup }) => {
   const [name, setName] = useState('');
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed">
-      <div className="bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden border border-white flex flex-col md:flex-row">
-        <div className="bg-blue-600 md:w-5/12 p-12 text-white flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+    <div className="min-h-screen bg-[#f1f4f9] flex items-center justify-center p-4 lg:p-10 font-['Outfit'] relative overflow-hidden">
+      {/* Decorative background blobs */}
+      <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-indigo-100 rounded-full blur-[120px] opacity-60"></div>
+      <div className="absolute bottom-[-10%] right-[-5%] w-[35%] h-[35%] bg-blue-100 rounded-full blur-[100px] opacity-60"></div>
+      
+      <div className="bg-white w-full max-w-[1150px] min-h-[700px] rounded-[3.5rem] shadow-[0_32px_80px_-16px_rgba(30,41,59,0.1)] overflow-hidden flex flex-col lg:flex-row relative z-10 border border-white">
+        {/* Left Panel: Branding & Story */}
+        <div className="lg:w-[45%] bg-[#0f172a] p-12 lg:p-16 text-white flex flex-col justify-between relative overflow-hidden">
+          {/* Advanced Mesh Gradient Overlay */}
+          <div className="absolute top-0 right-0 w-[120%] h-[120%] bg-gradient-to-tr from-indigo-900/40 via-blue-900/20 to-transparent pointer-events-none"></div>
+          <div className="absolute -top-20 -right-20 w-80 h-80 bg-indigo-600/30 rounded-full blur-[80px]"></div>
+          <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-blue-600/20 rounded-full blur-[80px]"></div>
+          
           <div className="relative z-10">
-            <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6 border border-white/30">
-              <Car size={32} strokeWidth={2.5} />
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md rounded-full border border-white/10 mb-12">
+               <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></div>
+               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200">System v2.4.0</span>
             </div>
-            <h2 className="text-3xl font-black tracking-tighter leading-tight mb-4">가장 스마트한 유류비 정산.</h2>
-            <p className="text-blue-100 font-bold text-sm leading-relaxed opacity-80">조직원을 초대하고, 투명하게 유류비를 정산하세요.</p>
+            
+            <div className="w-[100px] h-[100px] bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mb-12 shadow-2xl shadow-indigo-500/30 border border-indigo-400/30">
+              <Car size={50} className="text-white" strokeWidth={2.5} />
+            </div>
+            
+            <h2 className="text-5xl lg:text-7xl font-black tracking-tight leading-[1.05] mb-8">
+              가장 스마트한<br/>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-300">유류비 정산.</span>
+            </h2>
+            
+            <p className="text-slate-400 font-bold text-lg leading-relaxed max-w-sm">
+              인공지능 기반 거리 자동 산출 시스템으로 투명하고 빠른 유류대 지급을 경험하세요.
+            </p>
           </div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40">C-OIL Enterprise</p>
+          
+          <div className="relative z-10 space-y-8">
+            <div className="pt-10 border-t border-white/10">
+              <div className="flex items-center gap-10">
+                <div>
+                  <p className="text-3xl font-black text-white">99.8%</p>
+                  <p className="text-[11px] font-black text-indigo-400 uppercase tracking-widest mt-1">Accuracy</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">5k+</p>
+                  <p className="text-[11px] font-black text-indigo-400 uppercase tracking-widest mt-1">Daily Logs</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <div className="flex -space-x-3">
+                {[1,2,3,4].map(i => (
+                  <div key={i} className={`w-9 h-9 rounded-full border-2 border-[#0f172a] bg-slate-${i*100+200}`}></div>
+                ))}
+              </div>
+              <p className="text-xs font-bold text-slate-500">전사 임직원이 함께 사용 중입니다.</p>
+            </div>
+          </div>
         </div>
         
-        <div className="flex-1 p-12">
-          <div className="mb-10">
-            <h3 className="text-2xl font-black text-slate-900 tracking-tight mb-2">
-              {isLogin ? '반갑습니다!' : '새로운 시작'}
-            </h3>
-            <p className="text-sm font-bold text-slate-400">계정 정보를 입력해 주세요.</p>
-          </div>
+        {/* Right Panel: Auth Form */}
+        <div className="flex-1 p-12 lg:p-24 bg-white flex flex-col justify-center">
+          <div className="max-w-[420px] mx-auto w-full">
+            <div className="mb-12">
+              <h3 className="text-4xl font-black text-slate-900 tracking-tight mb-4">
+                {isLogin ? '환영합니다.' : '신규 가입'}
+              </h3>
+              <p className="text-slate-500 font-bold leading-relaxed">
+                {isLogin 
+                  ? '시스템 접근을 위해 등록된 사내 계정으로 로그인해 주세요.' 
+                  : '유류비 정산 플랫폼 사용을 위해 가입 신청을 진행해 주세요.'}
+              </p>
+            </div>
 
-          <form className="space-y-4" onSubmit={(e) => {
-            e.preventDefault();
-            isLogin ? onLogin(email, password) : onSignup(email, password, name);
-          }}>
-            {!isLogin && (
-              <InputGroup label="이름" icon={<User size={14}/>}>
-                <input 
-                  className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-blue-50 transition-all font-bold text-slate-700"
-                  placeholder="홍길동" value={name} onChange={e => setName(e.target.value)} required 
-                />
-              </InputGroup>
-            )}
-            <InputGroup label="이메일" icon={<Mail size={14}/>}>
-              <input 
-                type="email"
-                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-blue-50 transition-all font-bold text-slate-700"
-                placeholder="example@co.kr" value={email} onChange={e => setEmail(e.target.value)} required 
-              />
-            </InputGroup>
-            <InputGroup label="비밀번호" icon={<Lock size={14}/>}>
-              <input 
-                type="password"
-                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-blue-50 transition-all font-bold text-slate-700"
-                placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required 
-              />
-            </InputGroup>
+            <form className="space-y-6" onSubmit={(e) => {
+              e.preventDefault();
+              isLogin ? onLogin(email, password) : onSignup(email, password, name);
+            }}>
+              {!isLogin && (
+                <div className="animate-slide-up">
+                  <InputLabel label="사용자 성명" />
+                  <div className="relative">
+                    <User size={18} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input 
+                      type="text"
+                      className="w-full pl-14 pr-6 py-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
+                      placeholder="홍길동" value={name} onChange={e => setName(e.target.value)} required 
+                    />
+                  </div>
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <InputLabel label="사내 이메일 계정" />
+                <div className="relative">
+                  <Mail size={18} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="email"
+                    className="w-full pl-14 pr-6 py-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
+                    placeholder="example@co.kr" value={email} onChange={e => setEmail(e.target.value)} required 
+                  />
+                </div>
+              </div>
 
-            <button type="submit" className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-lg shadow-xl shadow-slate-200 mt-6 active:scale-95 transition-all">
-              {isLogin ? '로그인하기' : '회원가입 신청하기'}
-            </button>
-          </form>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center px-1">
+                  <InputLabel label="접속 비밀번호" />
+                  {isLogin && (
+                    <button type="button" className="text-[11px] font-black text-indigo-500 hover:text-indigo-700 transition-colors uppercase tracking-tight">Forgot PW?</button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Lock size={18} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="password"
+                    className="w-full pl-14 pr-6 py-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
+                    placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required 
+                  />
+                </div>
+              </div>
 
-          <div className="mt-8 text-center">
-            <button onClick={() => setIsLogin(!isLogin)} className="text-sm font-black text-blue-600 hover:underline">
-              {isLogin ? '계정이 없으신가요? 가입 신청' : '이미 계정이 있다면? 로그인'}
-            </button>
+              <button type="submit" className="w-full bg-slate-900 text-white py-6 rounded-2xl font-black text-xl shadow-2xl shadow-indigo-100 mt-6 active:scale-[0.98] hover:bg-black transition-all group flex items-center justify-center gap-3">
+                <span>{isLogin ? '플랫폼 로그인' : '가입 신청 진행하기'}</span>
+                <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+              </button>
+            </form>
+
+            <div className="mt-12 flex items-center gap-4">
+              <div className="h-px flex-1 bg-slate-100"></div>
+              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">or</span>
+              <div className="h-px flex-1 bg-slate-100"></div>
+            </div>
+
+            <div className="mt-8 text-center">
+              <p className="text-sm font-bold text-slate-400 mb-4">
+                {isLogin ? '아직 사내 계정이 없으신가요?' : '이미 계정이 설정되어 있나요?'}
+              </p>
+              <button 
+                onClick={() => setIsLogin(!isLogin)} 
+                className="w-full py-4 rounded-2xl border-2 border-slate-100 text-slate-600 font-black text-sm hover:border-indigo-200 hover:bg-slate-50 transition-all active:scale-[0.98]"
+              >
+                {isLogin ? '신규 계정 참가 신청하기' : '기존 계정으로 이동하기'}
+              </button>
+            </div>
           </div>
         </div>
+      </div>
+      
+      {/* Decorative footer text */}
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] pointer-events-none">
+        Secure Access Interface · Enterprise Mobility Platform
       </div>
     </div>
   );
 };
+
+const InputLabel = ({ label }) => (
+  <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 block px-1">
+    {label}
+  </label>
+);
 
 const AdminPanel = ({ db, appId }) => {
   const [users, setUsers] = useState([]);
@@ -1384,15 +1570,15 @@ const AdminPanel = ({ db, appId }) => {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         <div className="xl:col-span-2 space-y-6">
           <div className="flex items-center justify-between px-2">
-            <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
-              <Users className="text-blue-600" /> 직원 명단 및 권한 관리
+            <h3 className="text-xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
+              <Users className="text-indigo-600" /> 구성원 및 권한 관리
             </h3>
-            <span className="bg-slate-100 px-3 py-1 rounded-full text-[10px] font-black text-slate-500 uppercase">
-              Total {users.length}
+            <span className="bg-indigo-50 px-3 py-1 rounded-full text-[10px] font-black text-indigo-500 uppercase tracking-widest">
+              Total {users.length} Users
             </span>
           </div>
 
-          <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+          <div className="premium-card rounded-[2.5rem] overflow-hidden">
             <table className="w-full text-left">
               <thead className="bg-slate-50/50 border-b border-slate-100">
                 <tr>
@@ -1404,14 +1590,14 @@ const AdminPanel = ({ db, appId }) => {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {users.map(u => (
-                  <tr key={u.uid} className="hover:bg-slate-50/30 transition-colors">
+                  <tr key={u.uid} className="hover:bg-slate-50/30 transition-colors group">
                     <td className="px-8 py-6">
-                      <div className="font-black text-slate-900">{u.userName}</div>
+                      <div className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors">{u.userName}</div>
                       <div className="text-[11px] font-bold text-slate-400">{u.email}</div>
                     </td>
                     <td className="px-8 py-6">
                       <select 
-                        className="bg-slate-50 text-[11px] font-black px-3 py-1.5 rounded-lg border-none outline-none focus:ring-2 focus:ring-blue-500"
+                        className="bg-slate-50 text-[11px] font-black px-3 py-2 rounded-xl border-none outline-none focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer"
                         value={u.department}
                         onChange={(e) => updateUser(u.uid, { department: e.target.value })}
                       >
@@ -1455,40 +1641,40 @@ const AdminPanel = ({ db, appId }) => {
           </div>
         </div>
 
-        <div className="space-y-6">
-           <h3 className="text-xl font-black text-slate-800 px-2">조직 구성 관리</h3>
-           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
-              <p className="text-xs font-bold text-slate-400 leading-relaxed">회사의 부서 체계를 관리합니다. 등록된 부서는 직원 프로필 설정에서 바로 선택할 수 있습니다.</p>
-              <div className="space-y-2">
-                {orgUnits.map((unit, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl group">
-                    <span className="font-black text-slate-700">{unit}</span>
-                    <button 
-                      onClick={() => updateOrgUnitsRemote(orgUnits.filter((_, i) => i !== idx))} 
-                      className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="pt-4">
-                <input 
-                  type="text" 
-                  placeholder="새 부서 추가 (엔터)"
-                  className="w-full px-5 py-4 rounded-2xl border-2 border-dashed border-slate-100 focus:border-blue-500 outline-none font-bold text-sm transition-all"
-                  value={newOrgUnit}
-                  onChange={(e) => setNewOrgUnit(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.nativeEvent.isComposing && newOrgUnit.trim()) {
-                      updateOrgUnitsRemote([...orgUnits, newOrgUnit.trim()]);
-                      setNewOrgUnit('');
-                    }
-                  }}
-                />
-              </div>
-           </div>
-        </div>
+         <div className="space-y-6">
+            <h3 className="text-xl font-black text-slate-800 px-2 tracking-tight">조직 구성 관리</h3>
+            <div className="premium-card p-8 rounded-[2.5rem] space-y-6">
+               <p className="text-xs font-bold text-slate-400 leading-relaxed">회사의 부서 체계를 관리합니다. 등록된 부서는 직원 프로필 설정에서 바로 선택할 수 있습니다.</p>
+               <div className="space-y-3">
+                 {orgUnits.map((unit, idx) => (
+                   <div key={idx} className="flex items-center justify-between p-4 bg-slate-50/50 border border-slate-100 rounded-2xl group hover:border-indigo-200 hover:bg-indigo-50/20 transition-all">
+                     <span className="font-black text-slate-700 group-hover:text-indigo-600 transition-colors uppercase tracking-tight text-sm">{unit}</span>
+                     <button 
+                       onClick={() => updateOrgUnitsRemote(orgUnits.filter((_, i) => i !== idx))} 
+                       className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all p-1"
+                     >
+                       <Trash2 size={16} />
+                     </button>
+                   </div>
+                 ))}
+               </div>
+               <div className="pt-4">
+                 <input 
+                   type="text" 
+                   placeholder="새 부서 추가 (엔터)"
+                   className="w-full px-6 py-5 rounded-2xl border-2 border-dashed border-slate-100 focus:border-indigo-400 focus:bg-white outline-none font-black text-sm transition-all text-slate-600"
+                   value={newOrgUnit}
+                   onChange={(e) => setNewOrgUnit(e.target.value)}
+                   onKeyDown={(e) => {
+                     if (e.key === 'Enter' && !e.nativeEvent.isComposing && newOrgUnit.trim()) {
+                       updateOrgUnitsRemote([...orgUnits, newOrgUnit.trim()]);
+                       setNewOrgUnit('');
+                     }
+                   }}
+                 />
+               </div>
+            </div>
+         </div>
       </div>
     </div>
   );
@@ -1570,39 +1756,42 @@ const ManagementReport = ({ logs, users, db, appId }) => {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="bg-white p-7 rounded-[2rem] shadow-sm border border-slate-100">
-        <div className="flex justify-between items-center mb-6">
-          <h4 className="text-sm font-black text-slate-800">정산 데이터 필터</h4>
+    <div className="space-y-8 animate-fade-in">
+      <div className="premium-card p-8 rounded-[2.5rem]">
+        <div className="flex justify-between items-center mb-10">
+          <div className="flex items-center gap-3">
+             <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><FileText size={18} /></div>
+             <h4 className="text-lg font-black text-slate-800 tracking-tight">정산 데이터 실시간 필터</h4>
+          </div>
           <button 
             onClick={exportCSV}
-            className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-xs hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-200"
+            className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-2xl font-black text-[13px] hover:bg-black transition-all active:scale-95 shadow-xl shadow-indigo-100"
           >
-            <Download size={14} />
-            Excel 다운로드
+            <Download size={16} />
+            데이터 시트 다운로드
           </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 items-end">
           <div className="space-y-3">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">부서별 필터</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">부서별 필터</label>
             <select 
-              className="w-full px-5 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-50 transition-all appearance-none"
+              className="w-full px-6 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-400 transition-all appearance-none cursor-pointer text-sm"
               value={filters.department}
               onChange={e => setFilters({...filters, department: e.target.value, userId: 'all'})}
             >
-              <option value="all">전체 부서</option>
+              <option value="all">전체 부서 데이터</option>
               {orgUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
-              <option value="미지정">미지정</option>
+              <option value="미지정">미지정 구성원</option>
             </select>
           </div>
           <div className="space-y-3">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">인원 검색</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">특정 구성원 조회</label>
             <select 
-              className="w-full px-5 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-50 transition-all appearance-none"
+              className="w-full px-6 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-400 transition-all appearance-none cursor-pointer text-sm"
               value={filters.userId}
               onChange={e => setFilters({...filters, userId: e.target.value})}
             >
-              <option value="all">전체 인원</option>
+              <option value="all">전체 인원 합산</option>
               {users
                 .filter(u => filters.department === 'all' || u.department === filters.department)
                 .map(u => <option key={u.uid} value={u.uid}>{u.userName}</option>)
@@ -1610,30 +1799,30 @@ const ManagementReport = ({ logs, users, db, appId }) => {
             </select>
           </div>
           <div className="space-y-3">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">월별 원클릭 조회</label>
-            <div className="relative">
+            <label className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em] ml-1">월 단위 빠른 조회</label>
+            <div className="relative group">
               <input 
                 type="month" 
-                className="w-full px-5 py-3.5 rounded-2xl bg-blue-600 text-white font-black outline-none focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer"
+                className="w-full px-6 py-4.5 rounded-2xl bg-indigo-600 text-white font-black outline-none focus:ring-4 focus:ring-indigo-200 transition-all appearance-none cursor-pointer text-sm shadow-xl shadow-indigo-100"
                 value={selectedMonth}
                 onChange={e => handleMonthChange(e.target.value)}
               />
-              <Calendar size={16} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" />
+              <Calendar size={16} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none group-hover:scale-110 transition-transform" />
             </div>
           </div>
-          <div className="space-y-3 md:col-span-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">상세 기간 조정</label>
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">상세 기간 및 범위</label>
             <div className="flex gap-2 items-center">
               <input 
                 type="date" 
-                className="flex-1 px-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 text-xs outline-none focus:ring-4 focus:ring-blue-50 transition-all"
+                className="flex-1 px-4 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 text-[11px] outline-none focus:ring-4 focus:ring-indigo-50 focus:bg-white transition-all"
                 value={filters.startDate}
                 onChange={e => setFilters({...filters, startDate: e.target.value})}
               />
-              <span className="text-slate-300">~</span>
+              <span className="text-slate-300 font-black">~</span>
               <input 
                 type="date" 
-                className="flex-1 px-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-100 font-bold text-slate-700 text-xs outline-none focus:ring-4 focus:ring-blue-50 transition-all"
+                className="flex-1 px-4 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 text-[11px] outline-none focus:ring-4 focus:ring-indigo-50 focus:bg-white transition-all"
                 value={filters.endDate}
                 onChange={e => setFilters({...filters, endDate: e.target.value})}
               />
@@ -1643,18 +1832,18 @@ const ManagementReport = ({ logs, users, db, appId }) => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <StatCard title="검색 정산 합계" value={`${stats.totalAmount.toLocaleString()}원`} subtitle="필터링된 총 정산액" icon={<Calculator size={24}/>} />
-        <StatCard title="검색 총 거리" value={`${stats.totalDist.toFixed(1)}km`} subtitle="필터링된 총 운행거리" icon={<Navigation size={24}/>} />
+        <StatCard title="검색 결과 합계" value={`${stats.totalAmount.toLocaleString()}원`} subtitle="선택된 조건의 총 정산액" icon={<Calculator />} color="indigo" />
+        <StatCard title="검색 누적 거리" value={`${stats.totalDist.toFixed(1)}km`} subtitle="선택된 조건의 총 운행거리" icon={<Navigation />} color="emerald" />
       </div>
 
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+      <div className="premium-card rounded-[2.5rem] overflow-hidden">
         <table className="w-full text-left table-fixed">
-          <thead className="bg-slate-50 border-b border-slate-100">
+          <thead className="bg-slate-50/50 border-b border-slate-100">
             <tr>
-              <th className="w-[120px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">날짜</th>
-              <th className="w-[160px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">사용자 / 부서</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">운행 정보 (경유지 및 목적)</th>
-              <th className="w-[140px] px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">거리/금액</th>
+              <th className="w-[140px] px-6 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">날짜</th>
+              <th className="w-[200px] px-6 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">사용자 / 부서</th>
+              <th className="px-6 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">운행 상세 정보</th>
+              <th className="w-[180px] px-6 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-right whitespace-nowrap">거리 및 정산액</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -1666,23 +1855,26 @@ const ManagementReport = ({ logs, users, db, appId }) => {
               filteredLogs.map(log => {
                 const user = users.find(u => u.uid === log.userId);
                 return (
-                  <tr key={log.id} className="hover:bg-slate-50/50 transition-all">
-                    <td className="px-8 py-6 align-top">
-                      <div className="font-black text-sm text-slate-900">{log.date.slice(5)}</div>
+                  <tr key={log.id} className="hover:bg-slate-50/50 transition-all group">
+                    <td className="px-8 py-7 align-top">
+                      <div className="font-black text-[13px] text-slate-900">{log.date.slice(5)}</div>
                     </td>
-                    <td className="px-8 py-6 align-top">
-                      <div className="font-black text-slate-800">{log.userName}</div>
-                      <div className="text-[10px] font-black text-blue-500 mt-1 uppercase">{user?.department || '미지정'}</div>
+                    <td className="px-8 py-7 align-top">
+                      <div className="font-black text-slate-800 text-[13px] group-hover:text-indigo-600 transition-colors">{log.userName}</div>
+                      <div className="text-[10px] font-black text-indigo-500 mt-1 uppercase tracking-tight">{user?.department || '미지정'}</div>
                     </td>
-                    <td className="px-8 py-6">
-                      <div className="text-xs font-bold text-slate-600 leading-relaxed truncate">
+                    <td className="px-8 py-7">
+                      <div className="text-[12px] font-bold text-slate-600 leading-relaxed truncate group-hover:text-slate-900 transition-colors">
                         {log.routeSummary || `${log.departure} → ${log.destination}`}
                       </div>
-                      <div className="text-[10px] font-bold text-slate-400 mt-2 bg-slate-50 px-2 py-1 rounded-lg inline-block">{log.purpose}</div>
+                      <div className="text-[10px] font-black text-slate-400 mt-2.5 bg-slate-50 px-2 py-1 rounded-lg inline-flex items-center gap-1.5 border border-slate-100">
+                         <FileText size={10} />
+                         {log.purpose || '업무 목적 미기재'}
+                      </div>
                     </td>
-                    <td className="px-8 py-6 text-right align-top">
-                      <div className="font-black text-slate-900 whitespace-nowrap">{log.distance}km</div>
-                      <div className="font-black text-blue-600 text-sm mt-1 whitespace-nowrap">{Number(log.amount || 0).toLocaleString()}원</div>
+                    <td className="px-8 py-7 text-right align-top">
+                      <div className="font-black text-slate-900 whitespace-nowrap text-sm">{log.distance} <span className="text-[10px] text-slate-400 lowercase">km</span></div>
+                      <div className="font-black text-indigo-600 text-[15px] mt-1 whitespace-nowrap tracking-tight">{Number(log.amount || 0).toLocaleString()}<span className="text-[10px] opacity-60 ml-0.5">원</span></div>
                     </td>
                   </tr>
                 );
