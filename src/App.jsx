@@ -1223,8 +1223,11 @@ const MyPage = ({ profile, onUpdate }) => {
           <UserCircle size={28} />
         </div>
         <div>
-          <h3 className="text-xl font-black text-slate-800 tracking-tight">개인 설정 관리</h3>
-          <p className="text-[11px] font-bold text-slate-400">자주 사용하는 주소와 차량 정보를 효율적으로 관리하세요.</p>
+          <h3 className="text-2xl font-black text-slate-800 tracking-tight">{profile?.userName} 님</h3>
+          <div className="flex items-center gap-2.5 mt-1.5">
+            <span className="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md uppercase tracking-widest">{profile?.department || '부서 미지정'}</span>
+            <span className="text-[12px] font-bold text-slate-400">{profile?.email}</span>
+          </div>
         </div>
       </div>
 
