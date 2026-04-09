@@ -99,6 +99,7 @@ const App = () => {
   });
   const [statusMessage, setStatusMessage] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
+  const [orgUnits, setOrgUnits] = useState(['본사', '연구소', '영업부', '현장']);
   const [reportFilters, setReportFilters] = useState({
     department: 'all',
     userId: 'all',
@@ -114,7 +115,19 @@ const App = () => {
     const unsubscribe = onSnapshot(q, (snap) => {
       setAllUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
-    return () => unsubscribe();
+
+    // 조직 구성 정보 실시간 동기화 (App 레벨로 이동)
+    const orgRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'orgUnits');
+    const unsubscribeOrg = onSnapshot(orgRef, (snap) => {
+      if (snap.exists()) {
+        setOrgUnits(snap.data().units || ['본사', '연구소', '영업부', '현장']);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeOrg();
+    };
   }, [user, profile?.role]);
 
   useEffect(() => {
@@ -194,7 +207,7 @@ const App = () => {
     }
   };
 
-  const signup = async (email, password, userName) => {
+  const signup = async (email, password, userName, department) => {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const u = cred.user;
@@ -210,7 +223,7 @@ const App = () => {
         userName: userName,
         role: isMaster ? 'admin' : 'staff',
         status: isMaster ? 'approved' : 'pending',
-        department: isMaster ? '인사팀' : '미지정',
+        department: isMaster ? '인사팀' : (department || '미지정'),
         vehicleName: '',
         fuelType: 'gasoline',
         homeAddress: '',
@@ -331,7 +344,7 @@ const App = () => {
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center font-black text-slate-300">SYSTEM LOADING...</div>;
-  if (!user) return <AuthScreen onLogin={login} onSignup={signup} />;
+  if (!user) return <AuthScreen onLogin={login} onSignup={signup} orgUnits={orgUnits} db={db} appId={appId} />;
   
   // 마스터 관리자 이메일 체크
   const isAdmin = profile?.role === 'admin' || isMasterAdmin(user?.email); 
@@ -395,7 +408,7 @@ const App = () => {
           {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} />}
           {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} />}
           {view === 'settings' && <SettingsPanel fuelRates={fuelRates} onUpdate={updateSettings} db={db} appId={appId} />}
-          {view === 'admin' && <AdminPanel db={db} appId={appId} />}
+          {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} />}
           {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} />}
         </main>
       </div>
@@ -1450,11 +1463,22 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
   </nav>
 );
 
-const AuthScreen = ({ onLogin, onSignup }) => {
+const AuthScreen = ({ onLogin, onSignup, orgUnits: initialOrgUnits, db, appId }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [department, setDepartment] = useState('');
+  const [orgUnits, setOrgUnits] = useState(initialOrgUnits || []);
+
+  useEffect(() => {
+    // 로그인이 안된 상태에서도 조직 정보를 가져와야 함
+    const orgRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'orgUnits');
+    const unsubscribe = onSnapshot(orgRef, (snap) => {
+      if (snap.exists()) setOrgUnits(snap.data().units || []);
+    });
+    return () => unsubscribe();
+  }, [db, appId]);
 
   return (
     <div className="min-h-screen bg-[#f1f4f9] flex items-center justify-center p-4 lg:p-10 font-['Outfit'] relative overflow-hidden">
@@ -1507,7 +1531,7 @@ const AuthScreen = ({ onLogin, onSignup }) => {
             <div className="flex items-center gap-3">
               <div className="flex -space-x-3">
                 {[1,2,3,4].map(i => (
-                  <div key={i} className={`w-9 h-9 rounded-full border-2 border-[#0f172a] bg-slate-${i*100+200}`}></div>
+                  <div key={i} className={`w-9 h-9 rounded-full border-2 border-[#0f172a] bg-indigo-${i*100+200}`}></div>
                 ))}
               </div>
               <p className="text-xs font-bold text-slate-500">전사 임직원이 함께 사용 중입니다.</p>
@@ -1531,18 +1555,39 @@ const AuthScreen = ({ onLogin, onSignup }) => {
 
             <form className="space-y-6" onSubmit={(e) => {
               e.preventDefault();
-              isLogin ? onLogin(email, password) : onSignup(email, password, name);
+              isLogin ? onLogin(email, password) : onSignup(email, password, name, department);
             }}>
               {!isLogin && (
-                <div className="animate-slide-up">
-                  <InputLabel label="사용자 성명" />
-                  <div className="relative">
-                    <User size={18} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input 
-                      type="text"
-                      className="w-full pl-14 pr-6 py-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
-                      placeholder="홍길동" value={name} onChange={e => setName(e.target.value)} required 
-                    />
+                <div className="animate-slide-up space-y-6">
+                  <div className="space-y-2">
+                    <InputLabel label="사용자 성명" />
+                    <div className="relative">
+                      <User size={18} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input 
+                        type="text"
+                        className="w-full pl-14 pr-6 py-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
+                        placeholder="홍길동" value={name} onChange={e => setName(e.target.value)} required 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <InputLabel label="소속 부서 선택" />
+                    <div className="relative">
+                      <Users size={18} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <select 
+                        className="w-full pl-14 pr-10 py-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-700 appearance-none cursor-pointer"
+                        value={department}
+                        onChange={e => setDepartment(e.target.value)}
+                        required
+                      >
+                        <option value="">부서를 선택해 주세요</option>
+                        {orgUnits.map(unit => (
+                          <option key={unit} value={unit}>{unit}</option>
+                        ))}
+                      </select>
+                      <ChevronRight size={18} className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
+                    </div>
                   </div>
                 </div>
               )}
@@ -1617,9 +1662,8 @@ const InputLabel = ({ label }) => (
   </label>
 );
 
-const AdminPanel = ({ db, appId }) => {
+const AdminPanel = ({ db, appId, orgUnits, setOrgUnits }) => {
   const [users, setUsers] = useState([]);
-  const [orgUnits, setOrgUnits] = useState(['본사', '연구소', '영업부', '현장']);
 
   useEffect(() => {
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
@@ -1627,22 +1671,12 @@ const AdminPanel = ({ db, appId }) => {
       setUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
-    // 조직 구성 정보 실시간 동기화
-    const orgRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'orgUnits');
-    const unsubscribeOrg = onSnapshot(orgRef, (snap) => {
-      if (snap.exists()) {
-        setOrgUnits(snap.data().units || ['본사', '연구소', '영업부', '현장']);
-      }
-    });
-
-    return () => {
-      unsubscribe();
-      unsubscribeOrg();
-    };
+    return () => unsubscribe();
   }, [db, appId]);
 
   const updateOrgUnitsRemote = async (newUnits) => {
     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'orgUnits'), { units: newUnits });
+    setOrgUnits(newUnits);
   };
 
   const updateUser = async (uid, updates) => {
