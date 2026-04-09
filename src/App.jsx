@@ -1032,6 +1032,10 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                    onChange={e => setFavSearch(e.target.value)}
                 />
               </div>
+              <div className="mt-3 px-1 flex items-center gap-2">
+                <div className="w-1 h-1 rounded-full bg-indigo-400"></div>
+                <p className="text-[10px] font-black text-indigo-500/80">즐겨찾기 장소는 <span className="underline underline-offset-2">'내 정보'</span> 메뉴에서 등록 및 관리할 수 있습니다.</p>
+              </div>
             </div>
             <div className="max-h-[350px] overflow-y-auto p-4 custom-scrollbar space-y-2 bg-white">
               {profile.savedLocations
