@@ -37,7 +37,8 @@ import {
   Navigation,
   PanelLeftClose,
   PanelLeftOpen,
-  Search
+  Search,
+  X
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -594,6 +595,9 @@ const EmptyChart = ({ message }) => (
 );
 
 const LogEntryForm = ({ fuelRates, profile, onSave }) => {
+  const [favSelectorIdx, setFavSelectorIdx] = useState(null);
+  const [favSearch, setFavSearch] = useState('');
+
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     waypoints: [
@@ -855,17 +859,80 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                       <span>{profile.homeAlias || '우리집'}</span>
                     </button>
                   )}
-                  {profile?.savedLocations?.map(loc => (
+                  {profile?.savedLocations?.length > 0 && (
                     <button 
-                      key={loc.id}
                       type="button" 
-                      onClick={() => handleQuickSelect(idx, loc)}
-                      className="group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-700 text-[10px] font-black shadow-sm hover:border-indigo-500 hover:text-indigo-600 hover:-translate-y-0.5 transition-all"
+                      onClick={() => setFavSelectorIdx(idx)}
+                      className="group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-100 text-slate-500 text-[10px] font-black hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all border-dashed"
                     >
-                      <span className="text-indigo-500 opacity-80">📍</span>
-                      <span>{loc.name}</span>
+                      <Star size={12} className={favSelectorIdx === idx ? 'fill-indigo-500 text-indigo-500' : ''} />
+                      <span>즐겨찾기 선택</span>
                     </button>
-                  ))}
+                  )}
+
+                  {favSelectorIdx === idx && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+                      <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up border border-white/20">
+                        <div className="p-8 border-b border-slate-50 bg-slate-50/30">
+                          <div className="flex justify-between items-start mb-6">
+                            <div>
+                               <h4 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+                                 <Star className="fill-amber-400 text-amber-400" size={24}/> 즐겨찾기
+                               </h4>
+                               <p className="text-[11px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Select from saved locations</p>
+                            </div>
+                            <button onClick={() => setFavSelectorIdx(null)} className="p-2.5 hover:bg-white rounded-2xl transition-all shadow-sm">
+                               <X size={20} className="text-slate-400" />
+                            </button>
+                          </div>
+                          <div className="relative">
+                            <Search size={18} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" />
+                            <input 
+                               type="text"
+                               placeholder="장소를 검색하세요..."
+                               className="w-full pl-14 pr-6 py-4.5 rounded-[1.5rem] bg-white border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:border-indigo-400 transition-all font-black text-slate-700 shadow-sm"
+                               autoFocus
+                               value={favSearch}
+                               onChange={e => setFavSearch(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-[350px] overflow-y-auto p-4 custom-scrollbar space-y-2 bg-white">
+                          {profile.savedLocations
+                            .filter(loc => loc.name?.includes(favSearch) || loc.address?.includes(favSearch))
+                            .map(loc => (
+                               <button 
+                                  key={loc.id}
+                                  onClick={() => {
+                                    handleQuickSelect(idx, loc);
+                                    setFavSelectorIdx(null);
+                                    setFavSearch('');
+                                  }}
+                                  className="w-full flex items-center gap-4 p-5 rounded-[1.5rem] hover:bg-slate-50 transition-all text-left group border border-transparent hover:border-slate-100"
+                               >
+                                  <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all shrink-0">
+                                    <MapPin size={20}/>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <span className="block font-black text-slate-800 group-hover:text-indigo-600 transition-colors uppercase tracking-tight truncate">{loc.name}</span>
+                                    <span className="block text-[11px] font-bold text-slate-400 mt-1 truncate">{loc.address}</span>
+                                  </div>
+                                  <ChevronRight size={16} className="text-slate-200 group-hover:text-indigo-300 transition-all pr-1" />
+                               </button>
+                            ))
+                          }
+                          {profile.savedLocations.length === 0 && (
+                            <div className="py-20 text-center">
+                               <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                  <Star size={30} className="text-slate-200" />
+                               </div>
+                               <p className="font-black text-slate-300 tracking-tight">등록된 즐겨찾기 장소가 없습니다.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-3 items-center">
                   <div className="flex-[2] relative">
