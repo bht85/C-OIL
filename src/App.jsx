@@ -606,7 +606,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
     const hasDistance = formData.distance > 0;
     const allWaypointsNamed = formData.waypoints.every(wp => wp.alias && wp.alias.trim() !== '');
     const allWaypointsHaveAddress = formData.waypoints.every(wp => wp.address !== '');
-    return hasDistance && allWaypointsNamed && allWaypointsHaveAddress;
+    const allWaypointsHavePurpose = formData.waypoints.every(wp => wp.purpose && wp.purpose.trim() !== '');
+    return hasDistance && allWaypointsNamed && allWaypointsHaveAddress && allWaypointsHavePurpose;
   }, [formData.distance, formData.waypoints]);
 
   const calculatedAmount = useMemo(() => {
@@ -864,11 +865,16 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                   <div className="flex-1 relative">
                     <input 
                       type="text" 
-                      placeholder="방문 목적" 
-                      className="w-full px-4 py-4 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:bg-white transition-all font-bold text-sm text-slate-600 truncate"
+                      placeholder="방문 목적 (필수)" 
+                      className={`w-full px-4 py-4 rounded-2xl bg-slate-50 border-2 outline-none transition-all font-bold text-sm truncate ${
+                        wp.purpose ? 'border-transparent text-slate-600 focus:border-indigo-400 focus:bg-white' : 'border-red-50 text-red-500 focus:border-red-200'
+                      }`}
                       value={wp.purpose}
                       onChange={(e) => handleStopPurposeChange(idx, e.target.value)}
                     />
+                    {!wp.purpose && (
+                      <span className="absolute -top-6 right-1 text-[9px] font-black text-red-500 animate-pulse">필수</span>
+                    )}
                   </div>
 
                   {idx > 0 && idx < formData.waypoints.length - 1 ? (
