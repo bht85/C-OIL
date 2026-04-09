@@ -99,6 +99,13 @@ const App = () => {
   });
   const [statusMessage, setStatusMessage] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
+  const [reportFilters, setReportFilters] = useState({
+    department: 'all',
+    userId: 'all',
+    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
+    endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10),
+    selectedMonth: new Date().toISOString().slice(0, 7)
+  });
 
   useEffect(() => {
     if (!user || profile?.role !== 'admin') return;
@@ -267,6 +274,62 @@ const App = () => {
     } catch { showStatus("저장 실패", 'error'); }
   };
 
+  const handleExportData = () => {
+    let dataToExport = logs;
+    let filename = `운행정산내역_${new Date().toISOString().slice(0, 10)}.csv`;
+
+    if (view === 'reports') {
+      dataToExport = logs.filter(log => {
+        const u = allUsers.find(au => au.uid === log.userId);
+        const logDept = u?.department || '미지정';
+        const matchDept = reportFilters.department === 'all' || logDept === reportFilters.department;
+        const matchUser = reportFilters.userId === 'all' || log.userId === reportFilters.userId;
+        const matchStart = !reportFilters.startDate || log.date >= reportFilters.startDate;
+        const matchEnd = !reportFilters.endDate || log.date <= reportFilters.endDate;
+        return matchDept && matchUser && matchStart && matchEnd;
+      });
+      filename = `유류비_정산리포트_${reportFilters.startDate}_${reportFilters.endDate}.csv`;
+    }
+
+    if (dataToExport.length === 0) {
+      showStatus("내보낼 데이터가 없습니다.", "error");
+      return;
+    }
+
+    const headers = ["날짜", "사용자", "부서", "출발지", "도착지", "운행목적", "거리(km)", "유종", "금액(원)", "경로상세"];
+    const rows = dataToExport.map(log => {
+      const userProfile = allUsers.find(u => u.uid === log.userId);
+      return [
+        log.date,
+        log.userName,
+        userProfile?.department || '미지정',
+        log.departure || "",
+        log.destination || "",
+        log.purpose || "",
+        log.distance,
+        log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG',
+        log.amount,
+        log.routeSummary || ""
+      ];
+    });
+
+    let csvContent = "\ufeff"; // UTF-8 BOM
+    csvContent += headers.join(",") + "\n";
+    rows.forEach(row => {
+      csvContent += row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",") + "\n";
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showStatus("데이터 내보내기 완료");
+  };
+
   if (loading) return <div className="h-screen flex items-center justify-center font-black text-slate-300">SYSTEM LOADING...</div>;
   if (!user) return <AuthScreen onLogin={login} onSignup={signup} />;
   
@@ -310,10 +373,15 @@ const App = () => {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 bg-white px-5 py-3 rounded-2xl border border-slate-100 text-slate-600 font-bold shadow-sm hover:shadow-md hover:border-indigo-100 transition-all active:scale-95">
-              <Download size={18} className="text-indigo-500" /> 
-              <span className="text-sm">데이터 내보내기</span>
-            </button>
+            {(view === 'history' || view === 'reports') && (
+              <button 
+                onClick={handleExportData}
+                className="flex items-center gap-2 bg-white px-5 py-3 rounded-2xl border border-slate-100 text-slate-600 font-bold shadow-sm hover:shadow-md hover:border-indigo-100 transition-all active:scale-95"
+              >
+                <Download size={18} className="text-indigo-500" /> 
+                <span className="text-sm">데이터 내보내기</span>
+              </button>
+            )}
           </div>
         </header>
         <main className="max-w-7xl">
@@ -325,7 +393,7 @@ const App = () => {
           {view === 'dashboard' && <Dashboard logs={logs} />}
           {view === 'log' && <LogEntryForm fuelRates={fuelRates} profile={profile} onSave={saveLog} />}
           {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} />}
-          {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} />}
+          {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} />}
           {view === 'settings' && <SettingsPanel fuelRates={fuelRates} onUpdate={updateSettings} db={db} appId={appId} />}
           {view === 'admin' && <AdminPanel db={db} appId={appId} />}
           {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} />}
@@ -1676,22 +1744,13 @@ const AdminPanel = ({ db, appId }) => {
   );
 };
 
-const ManagementReport = ({ logs, users, db, appId }) => {
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [filters, setFilters] = useState({
-    department: 'all',
-    userId: 'all',
-    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
-    endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10)
-  });
-
+const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange }) => {
   // 월 변경 시 시작/종료일 자동 설정
   const handleMonthChange = (month) => {
-    setSelectedMonth(month);
     const [year, m] = month.split('-').map(Number);
     const start = new Date(year, m - 1, 1).toISOString().slice(0, 10);
     const end = new Date(year, m, 0).toISOString().slice(0, 10);
-    setFilters(prev => ({ ...prev, startDate: start, endDate: end }));
+    onFilterChange(prev => ({ ...prev, selectedMonth: month, startDate: start, endDate: end }));
   };
 
   const [orgUnits, setOrgUnits] = useState(['본사', '연구소', '영업부', '현장']);
@@ -1724,33 +1783,6 @@ const ManagementReport = ({ logs, users, db, appId }) => {
     return { totalDist, totalAmount, count: filteredLogs.length };
   }, [filteredLogs]);
 
-  const exportCSV = () => {
-    const headers = ['날짜', '성명', '부서', '운행구간', '목적', '거리(km)', '유종', '금액(원)'];
-    const rows = filteredLogs.map(log => {
-      const user = users.find(u => u.uid === log.userId);
-      return [
-        log.date,
-        log.userName,
-        user?.department || '미지정',
-        log.routeSummary?.replaceAll(' → ', ' > ') || `${log.departure} > ${log.destination}`,
-        log.purpose,
-        log.distance,
-        log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG',
-        log.amount
-      ];
-    });
-
-    const csvContent = "\uFEFF" + [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `유류비_정산리포트_${filters.startDate}_${filters.endDate}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="premium-card p-8 rounded-[2.5rem]">
@@ -1759,13 +1791,6 @@ const ManagementReport = ({ logs, users, db, appId }) => {
              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><FileText size={18} /></div>
              <h4 className="text-lg font-black text-slate-800 tracking-tight">정산 데이터 실시간 필터</h4>
           </div>
-          <button 
-            onClick={exportCSV}
-            className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-2xl font-black text-[13px] hover:bg-black transition-all active:scale-95 shadow-xl shadow-indigo-100"
-          >
-            <Download size={16} />
-            데이터 시트 다운로드
-          </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 items-end">
           <div className="space-y-3">
@@ -1773,7 +1798,7 @@ const ManagementReport = ({ logs, users, db, appId }) => {
             <select 
               className="w-full px-6 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-400 transition-all appearance-none cursor-pointer text-sm"
               value={filters.department}
-              onChange={e => setFilters({...filters, department: e.target.value, userId: 'all'})}
+              onChange={e => onFilterChange({...filters, department: e.target.value, userId: 'all'})}
             >
               <option value="all">전체 부서 데이터</option>
               {orgUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
@@ -1785,7 +1810,7 @@ const ManagementReport = ({ logs, users, db, appId }) => {
             <select 
               className="w-full px-6 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-400 transition-all appearance-none cursor-pointer text-sm"
               value={filters.userId}
-              onChange={e => setFilters({...filters, userId: e.target.value})}
+              onChange={e => onFilterChange({...filters, userId: e.target.value})}
             >
               <option value="all">전체 인원 합산</option>
               {users
@@ -1800,7 +1825,7 @@ const ManagementReport = ({ logs, users, db, appId }) => {
               <input 
                 type="month" 
                 className="w-full px-6 py-4.5 rounded-2xl bg-indigo-600 text-white font-black outline-none focus:ring-4 focus:ring-indigo-200 transition-all appearance-none cursor-pointer text-sm shadow-xl shadow-indigo-100"
-                value={selectedMonth}
+                value={filters.selectedMonth}
                 onChange={e => handleMonthChange(e.target.value)}
               />
               <Calendar size={16} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none group-hover:scale-110 transition-transform" />
@@ -1813,14 +1838,14 @@ const ManagementReport = ({ logs, users, db, appId }) => {
                 type="date" 
                 className="flex-1 px-4 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 text-[11px] outline-none focus:ring-4 focus:ring-indigo-50 focus:bg-white transition-all"
                 value={filters.startDate}
-                onChange={e => setFilters({...filters, startDate: e.target.value})}
+                onChange={e => onFilterChange({...filters, startDate: e.target.value})}
               />
               <span className="text-slate-300 font-black">~</span>
               <input 
                 type="date" 
                 className="flex-1 px-4 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 text-[11px] outline-none focus:ring-4 focus:ring-indigo-50 focus:bg-white transition-all"
                 value={filters.endDate}
-                onChange={e => setFilters({...filters, endDate: e.target.value})}
+                onChange={e => onFilterChange({...filters, endDate: e.target.value})}
               />
             </div>
           </div>
