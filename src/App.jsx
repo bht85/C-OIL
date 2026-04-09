@@ -611,6 +611,13 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
     isManualDistance: false // 수동 입력 여부
   });
 
+  // 프로필의 기본 유종이 변경되면 폼 데이터도 함께 업데이트
+  useEffect(() => {
+    if (profile?.fuelType) {
+      setFormData(prev => ({ ...prev, fuelType: profile.fuelType }));
+    }
+  }, [profile?.fuelType]);
+
   // Haversine 거리 계산 함수 (사용 전 먼저 선언)
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371;
@@ -820,15 +827,18 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
           </InputGroup>
 
           <InputGroup label="사용 유종" icon={<Fuel size={16}/>}>
-            <select 
-              className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-bold text-slate-700 appearance-none"
-              value={formData.fuelType}
-              onChange={e => setFormData({...formData, fuelType: e.target.value})}
-            >
-              <option value="gasoline">휘발유 ({Number(fuelRates?.gasoline?.unitPrice).toFixed(1)}원/km)</option>
-              <option value="diesel">경유 ({Number(fuelRates?.diesel?.unitPrice).toFixed(1)}원/km)</option>
-              <option value="lpg">LPG ({Number(fuelRates?.lpg?.unitPrice).toFixed(1)}원/km)</option>
-            </select>
+            <div className="relative group">
+              <div className="w-full px-5 py-4.5 rounded-2xl bg-slate-100/50 border border-slate-200 font-bold text-slate-600 flex items-center justify-between shadow-inner">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                  {formData.fuelType === 'gasoline' ? '휘발유 (Premium)' : formData.fuelType === 'diesel' ? '경유 (Diesel)' : '액화석유가스 (LPG)'} 
+                  <span className="text-indigo-500 ml-1">({Number(fuelRates?.[formData.fuelType]?.unitPrice || 0).toFixed(1)}원/km)</span>
+                </span>
+              </div>
+              <p className="mt-2.5 px-1 text-[10px] font-black text-slate-400 italic">
+                ※ 유종 변경은 <span className="text-indigo-500 underline underline-offset-2">'내 정보'</span> 메뉴에서 가능합니다.
+              </p>
+            </div>
           </InputGroup>
         </div>
 
