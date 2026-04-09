@@ -1664,6 +1664,8 @@ const InputLabel = ({ label }) => (
 
 const AdminPanel = ({ db, appId, orgUnits, setOrgUnits }) => {
   const [users, setUsers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [deptFilter, setDeptFilter] = useState('all');
 
   useEffect(() => {
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
@@ -1691,6 +1693,14 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits }) => {
 
   const [newOrgUnit, setNewOrgUnit] = useState('');
 
+  const filteredUsers = users.filter(user => {
+    const term = searchTerm.toLowerCase();
+    const matchName = user.userName?.toLowerCase().includes(term);
+    const matchEmail = user.email?.toLowerCase().includes(term);
+    const matchDept = deptFilter === 'all' || user.department === deptFilter;
+    return (matchName || matchEmail) && matchDept;
+  });
+
   return (
     <div className="space-y-10">
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
@@ -1700,8 +1710,34 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits }) => {
               <Users className="text-indigo-600" /> 구성원 및 권한 관리
             </h3>
             <span className="bg-indigo-50 px-3 py-1 rounded-full text-[10px] font-black text-indigo-500 uppercase tracking-widest">
-              Total {users.length} Users
+              Total {filteredUsers.length} Users
             </span>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-4 px-2">
+            <div className="flex-[2] relative">
+              <Search size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="성함 또는 이메일로 검색" 
+                className="w-full pl-14 pr-6 py-4 rounded-2xl bg-white border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:border-indigo-400 transition-all font-bold text-slate-700 placeholder:text-slate-300 text-[13px] shadow-sm"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex-1 relative">
+              <Users size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+              <select 
+                className="w-full pl-14 pr-10 py-4 rounded-2xl bg-white border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:border-indigo-400 transition-all font-bold text-slate-700 appearance-none cursor-pointer text-[13px] shadow-sm"
+                value={deptFilter}
+                onChange={e => setDeptFilter(e.target.value)}
+              >
+                <option value="all">전체 부서 필터</option>
+                {orgUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                <option value="미지정">부서 미지정</option>
+              </select>
+              <ChevronRight size={16} className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
+            </div>
           </div>
 
           <div className="premium-card rounded-[2.5rem] overflow-hidden">
@@ -1715,7 +1751,7 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {users.map(u => (
+                {filteredUsers.map(u => (
                   <tr key={u.uid} className="hover:bg-slate-50/30 transition-colors group">
                     <td className="px-8 py-6">
                       <div className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors">{u.userName}</div>
