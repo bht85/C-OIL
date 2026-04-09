@@ -1018,12 +1018,14 @@ const HistoryTable = ({ logs, onDelete }) => {
                     )}
                   </td>
                   <td className="px-8 py-7 text-right">
-                    <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.distance} <span className="text-[10px] font-bold text-slate-400">km</span></div>
-                    <div className={`text-[10px] px-2 py-1 rounded-lg font-black mt-2 inline-block uppercase tracking-tight ${
-                      log.fuelType === 'gasoline' ? 'bg-indigo-50 text-indigo-600' : 
-                      log.fuelType === 'diesel' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
-                    }`}>
-                      {log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG'}
+                    <div className="flex items-center justify-end gap-3">
+                      <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.distance} <span className="text-[10px] font-bold text-slate-400">km</span></div>
+                      <div className={`text-[9px] px-2 py-1 rounded-lg font-black inline-block uppercase tracking-tight shrink-0 ${
+                        log.fuelType === 'gasoline' ? 'bg-indigo-50 text-indigo-600' : 
+                        log.fuelType === 'diesel' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                      }`}>
+                        {log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG'}
+                      </div>
                     </div>
                   </td>
                   <td className="px-8 py-7 text-right">
