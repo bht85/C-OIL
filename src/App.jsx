@@ -695,10 +695,6 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
     return hasDistance && allWaypointsNamed && allWaypointsHaveAddress && allWaypointsHavePurpose;
   }, [formData.distance, formData.waypoints]);
 
-  const calculatedAmount = useMemo(() => {
-    const rate = fuelRates[formData.fuelType]?.unitPrice || 0;
-    return Math.round(formData.distance * rate);
-  }, [formData.distance, formData.fuelType, fuelRates]);
 
   const openSearch = (index) => {
     new window.daum.Postcode({
