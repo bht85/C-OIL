@@ -634,8 +634,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     waypoints: [
-      { id: 'start', label: '출발지', address: '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780 },
-      { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276 }
+      { id: 'start', label: '출발지', address: '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780, parkingFee: 0 },
+      { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0 }
     ],
     purpose: '',
     fuelType: profile?.fuelType || 'gasoline',
@@ -661,6 +661,13 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
+
+  const calculatedAmount = useMemo(() => {
+    const rate = Number(fuelRates?.[formData.fuelType]?.unitPrice || 0);
+    const fuelCost = Math.round(formData.distance * rate);
+    const totalParking = formData.waypoints.reduce((acc, wp) => acc + (Number(wp.parkingFee) || 0), 0);
+    return fuelCost + totalParking;
+  }, [formData.distance, formData.fuelType, fuelRates, formData.waypoints]);
 
   // 프로필 정보가 변경되거나 로드되면 기본값 적용 및 거리 계산
   useEffect(() => {
@@ -802,6 +809,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
       address: '', 
       alias: '',
       purpose: '',
+      parkingFee: 0,
       lat: 37.5, 
       lng: 127.0 
     });
@@ -827,8 +835,10 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
       distance: formData.distance,
       fuelType: formData.fuelType,
       amount: calculatedAmount,
+      parkingTotal: formData.waypoints.reduce((acc, wp) => acc + (Number(wp.parkingFee) || 0), 0),
+      fuelAmount: calculatedAmount - formData.waypoints.reduce((acc, wp) => acc + (Number(wp.parkingFee) || 0), 0),
       routeSummary: formData.waypoints
-        .map(w => `[${w.alias}${w.purpose ? ` (${w.purpose})` : ''}] ${w.address}`)
+        .map(w => `[${w.alias}${w.purpose ? ` (${w.purpose})` : ''}${w.parkingFee > 0 ? ` [🅿️${w.parkingFee.toLocaleString()}]` : ''}] ${w.address}`)
         .join(' → ')
     };
     
@@ -836,8 +846,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
     setFormData(prev => ({ 
       ...prev, 
       waypoints: [
-        { id: 'start', label: '출발지', address: '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780 },
-        { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276 }
+        { id: 'start', label: '출발지', address: '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780, parkingFee: 0 },
+        { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0 }
       ], 
       purpose: '',
       distance: 0,
@@ -957,6 +967,21 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                     )}
                   </div>
 
+                  <div className="w-24 relative">
+                    <input 
+                      type="number" 
+                      placeholder="주차비" 
+                      className="w-full pl-3 pr-6 py-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-xs text-indigo-600 focus:bg-indigo-50/50 transition-all text-right appearance-none"
+                      value={wp.parkingFee || ''}
+                      onChange={(e) => {
+                        const newWaypoints = [...formData.waypoints];
+                        newWaypoints[idx].parkingFee = parseInt(e.target.value) || 0;
+                        setFormData({ ...formData, waypoints: newWaypoints });
+                      }}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-300">원</span>
+                  </div>
+
                   {idx > 0 && idx < formData.waypoints.length - 1 ? (
                     <button 
                       type="button" 
@@ -966,7 +991,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                       <Trash2 size={18} />
                     </button>
                   ) : (
-                    <div className="w-10"></div>
+                    <div className="w-8"></div>
                   )}
                 </div>
               </div>
@@ -1202,6 +1227,11 @@ const HistoryTable = ({ logs, onDelete }) => {
                   </td>
                   <td className="px-8 py-7 text-right">
                     <div className="font-black text-indigo-600 text-[17px] whitespace-nowrap tracking-tight">{Number(log.amount || 0).toLocaleString()} <span className="text-[11px] font-bold opacity-60">원</span></div>
+                    {log.parkingTotal > 0 && (
+                      <div className="text-[9px] font-bold text-slate-400 mt-1">
+                        (유류 {Number(log.fuelAmount || 0).toLocaleString()} + 주차 {Number(log.parkingTotal).toLocaleString()})
+                      </div>
+                    )}
                   </td>
                   <td className="px-8 py-7 text-center">
                     <button 
@@ -2142,6 +2172,11 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange }) =
                     <td className="px-8 py-7 text-right align-top">
                       <div className="font-black text-slate-900 whitespace-nowrap text-sm">{log.distance} <span className="text-[10px] text-slate-400 lowercase">km</span></div>
                       <div className="font-black text-indigo-600 text-[15px] mt-1 whitespace-nowrap tracking-tight">{Number(log.amount || 0).toLocaleString()}<span className="text-[10px] opacity-60 ml-0.5">원</span></div>
+                      {log.parkingTotal > 0 && (
+                        <div className="text-[9px] font-bold text-slate-400 mt-1">
+                          주차 {Number(log.parkingTotal).toLocaleString()}원 포함
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
