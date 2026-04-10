@@ -736,7 +736,6 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
             }
 
             // 방문 목적 (목적) 추출 - 맨 뒤의 괄호 탐색
-            let alias = infoPart;
             const purpMatch = alias.match(/\s?\(([^)]+)\)$/);
             if (purpMatch) {
               purpose = purpMatch[1];
