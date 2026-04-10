@@ -708,8 +708,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
     ],
     purpose: '',
     fuelType: profile?.fuelType || 'gasoline',
-    distance: 0, // 최종 주행 거리
-    isManualDistance: false // 수동 입력 여부
+    distance: initialData?.distance || 0, // 최종 주행 거리
+    isManualDistance: initialData ? true : false // 수정 중일 때는 기존 거리를 보존하기 위해 수동 모드로 시작
   });
 
   // 프로필의 기본 유종이 변경되면 폼 데이터도 함께 업데이트
