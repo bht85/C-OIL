@@ -93,6 +93,7 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [view, setView] = useState('dashboard');
+  const [editingLog, setEditingLog] = useState(null);
   const [logs, setLogs] = useState([]);
   const [fuelRates, setFuelRates] = useState({
     gasoline: { unitPrice: 229.55, avgPrice: 1836.41 },
@@ -102,6 +103,7 @@ const App = () => {
   });
   const [statusMessage, setStatusMessage] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
+  const [isNewUser, setIsNewUser] = useState(false);
   const [orgUnits, setOrgUnits] = useState(['본사', '연구소', '영업부', '현장']);
   const [reportFilters, setReportFilters] = useState({
     department: 'all',
@@ -141,7 +143,12 @@ const App = () => {
         const userDoc = await getDoc(userDocRef);
         
         if (userDoc.exists()) {
-          setProfile(userDoc.data());
+          const existingProfile = userDoc.data();
+          setProfile(existingProfile);
+          // 기존 사용자인데 차량/유종 미입력 시 내 정보 화면으로 이동
+          if (!existingProfile.vehicleName || !existingProfile.fuelType) {
+            setIsNewUser(true);
+          }
         } else {
           const isMaster = isMasterAdmin(u.email);
 
@@ -153,13 +160,14 @@ const App = () => {
             status: isMaster ? 'approved' : 'pending',
             department: isMaster ? '인사팀' : '미지정',
             vehicleName: '',
-            fuelType: 'gasoline',
+            fuelType: '',
             homeAddress: '',
             homeAlias: '우리집',
             savedLocations: []
           };
           await setDoc(userDocRef, newProfile);
           setProfile(newProfile);
+          setIsNewUser(true); // 신규 사용자 → 내 정보 화면으로 이동 트리거
         }
       } else {
         setUser(null);
@@ -190,6 +198,15 @@ const App = () => {
       events.forEach(e => window.removeEventListener(e, resetTimer));
     };
   }, [user]);
+  
+  // 신규 가입 또는 정보 미완성 시 내 정보 화면으로 자동 이동
+  useEffect(() => {
+    if (isNewUser && user && profile && (profile.status === 'approved' || isMasterAdmin(user.email))) {
+      setView('profile');
+      setIsNewUser(false);
+      showStatus("차량명과 유종을 입력하면 바로 서비스를 이용할 수 있습니다.", "info");
+    }
+  }, [isNewUser, user, profile]);
 
   useEffect(() => {
     if (!user || (profile?.status !== 'approved' && profile?.role !== 'admin')) return;
@@ -252,7 +269,7 @@ const App = () => {
         status: isMaster ? 'approved' : 'pending',
         department: isMaster ? '인사팀' : (department || '미지정'),
         vehicleName: '',
-        fuelType: 'gasoline',
+        fuelType: '',
         homeAddress: '',
         homeAlias: '우리집',
         savedLocations: []
@@ -280,23 +297,70 @@ const App = () => {
 
   const saveLog = async (logData) => {
     try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), {
+      const logId = logData.id || `log_${Date.now()}`;
+      const payload = {
         ...logData,
+        id: logId,
         userId: user.uid,
         userName: profile?.userName || user.email,
-        department: profile?.department || '미지정', // 팀장 권한 조회를 위해 부서 정보 추가
-        createdAt: new Date().toISOString()
-      });
-      showStatus("저장되었습니다.");
+        department: profile?.department || '미지정',
+        createdAt: logData.createdAt || new Date().toISOString(),
+        requestStatus: 'none',
+        requestType: null,
+        requestReason: null
+      };
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId), payload);
+      showStatus(logData.id ? "기록이 수정되었습니다." : "기록이 저장되었습니다.");
       setView('history');
-    } catch { showStatus("저장 실패", 'error'); }
+      setEditingLog(null);
+    } catch (e) {
+      console.error(e);
+      showStatus("저장 실패", 'error');
+    }
   };
 
   const deleteLog = async (id) => {
     try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', id));
-      showStatus("삭제되었습니다.");
+      if (confirm('정말 이 기록을 삭제하시겠습니까?')) {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', id));
+        showStatus("삭제되었습니다.");
+      }
     } catch { showStatus("삭제 실패", 'error'); }
+  };
+
+  const requestCorrection = async (id, requestType, reason) => {
+    try {
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', id), {
+        requestStatus: 'pending',
+        requestType,
+        requestReason: reason,
+        requestedAt: new Date().toISOString()
+      });
+      showStatus("보정 요청이 전송되었습니다.");
+    } catch { showStatus("요청 실패", 'error'); }
+  };
+
+  const approveRequest = async (log) => {
+    try {
+      if (log.requestType === 'delete') {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', log.id));
+        showStatus("요청 승인: 내역이 삭제되었습니다.");
+      } else {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', log.id), {
+          requestStatus: 'approved'
+        });
+        showStatus("요청 승인: 이제 해당 내역을 수정할 수 있습니다.");
+      }
+    } catch { showStatus("처리 실패", 'error'); }
+  };
+
+  const rejectRequest = async (id) => {
+    try {
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', id), {
+        requestStatus: 'none'
+      });
+      showStatus("요청이 반려되었습니다.");
+    } catch { showStatus("처리 실패", 'error'); }
   };
 
   const updateProfile = async (newProfile) => {
@@ -459,11 +523,11 @@ const App = () => {
             </div>
           )}
           {view === 'dashboard' && <Dashboard logs={logs} />}
-          {view === 'log' && <LogEntryForm fuelRates={fuelRates} profile={profile} onSave={saveLog} />}
-          {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} />}
+          {view === 'log' && <LogEntryForm fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} />}
+          {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} isAdmin={isAdmin} onRequestCorrection={requestCorrection} onUpdateLog={saveLog} onEdit={(log) => { setEditingLog(log); setView('log'); }} />}
           {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} />}
           {view === 'settings' && <SettingsPanel fuelRates={fuelRates} onUpdate={updateSettings} db={db} appId={appId} />}
-          {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} />}
+          {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} />}
           {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} />}
         </main>
       </div>
@@ -474,10 +538,11 @@ const App = () => {
 
 // --- Sub-Components ---
 
-const NavItem = ({ icon, label, active, onClick, isCollapsed }) => (
+const NavItem = ({ icon, label, active, onClick, isCollapsed, disabled }) => (
   <button 
-    onClick={onClick}
+    onClick={disabled ? () => {} : onClick}
     className={`w-full flex items-center gap-3 ${isCollapsed ? 'px-0 justify-center' : 'px-4'} py-3.5 rounded-2xl text-[13px] font-bold transition-all duration-300 group relative ${
+      disabled ? 'opacity-30 cursor-not-allowed' :
       active 
       ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' 
       : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
@@ -630,7 +695,7 @@ const EmptyChart = ({ message }) => (
   </div>
 );
 
-const LogEntryForm = ({ fuelRates, profile, onSave }) => {
+const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
   const [favSelectorIdx, setFavSelectorIdx] = useState(null);
   const [favSearch, setFavSearch] = useState('');
 
@@ -648,10 +713,17 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
 
   // 프로필의 기본 유종이 변경되면 폼 데이터도 함께 업데이트
   useEffect(() => {
-    if (profile?.fuelType) {
+    if (initialData) {
+      setFormData({
+        ...initialData,
+        date: initialData.date || new Date().toISOString().split('T')[0],
+        waypoints: initialData.waypoints || [],
+        isManualDistance: initialData.isManualDistance || false
+      });
+    } else if (profile?.fuelType) {
       setFormData(prev => ({ ...prev, fuelType: profile.fuelType }));
     }
-  }, [profile?.fuelType]);
+  }, [initialData, profile?.fuelType]);
 
   // Haversine 거리 계산 함수 (사용 전 먼저 선언)
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -1175,9 +1247,64 @@ const InputGroup = ({ label, icon, children }) => (
   </div>
 );
 
-const HistoryTable = ({ logs, onDelete }) => {
+const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit }) => {
+  const [requestModal, setRequestModal] = useState({ show: false, logId: null, type: 'delete' });
+  const [reason, setReason] = useState('');
+
+  // 익일 자동 마감 판단: createdAt 다음날 00:00 이후 잠기는지 확인
+  const isLogLocked = (log) => {
+    if (log.requestStatus === 'approved') return false; // 승인된 건은 잠금 해제
+    if (!log.createdAt) return false;
+    const created = new Date(log.createdAt);
+    const lockTime = new Date(created);
+    lockTime.setDate(lockTime.getDate() + 1);
+    lockTime.setHours(0, 0, 0, 0);
+    return new Date() >= lockTime;
+  };
+
+  const handleRequestSubmit = () => {
+    if (!reason.trim()) return alert('사유를 입력해주세요.');
+    onRequestCorrection(requestModal.logId, requestModal.type, reason);
+    setRequestModal({ show: false, logId: null, type: 'delete' });
+    setReason('');
+  };
+
   return (
-    <div className="premium-card rounded-[2.5rem] overflow-hidden animate-fade-in">
+    <div className="premium-card rounded-[2.5rem] overflow-hidden animate-fade-in relative">
+      {requestModal.show && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl animate-slide-up">
+            <h4 className="text-2xl font-black text-slate-900 mb-2">보정 요청 서류</h4>
+            <p className="text-sm font-bold text-slate-400 mb-8">마감된 내역의 {requestModal.type === 'delete' ? '삭제' : '수정'} 사유를 입력해 주세요.</p>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">요청 사유 (필수)</label>
+                <textarea 
+                  className="w-full px-6 py-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-700 placeholder:text-slate-300 min-h-[120px]"
+                  placeholder="예: 도착지 주소 오기입으로 인한 실주행거리 차이 발생"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <button 
+                  onClick={() => setRequestModal({ show: false, logId: null, type: 'delete' })}
+                  className="py-4 rounded-xl font-black text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all"
+                >
+                  취소
+                </button>
+                <button 
+                  onClick={handleRequestSubmit}
+                  className="py-4 rounded-xl font-black text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all"
+                >
+                  요청 전송
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto">
         <table className="w-full text-left table-fixed">
           <thead className="bg-slate-50/50 border-b border-slate-100">
@@ -1186,7 +1313,7 @@ const HistoryTable = ({ logs, onDelete }) => {
               <th className="px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">운행 경로 및 목적</th>
               <th className="w-[180px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-right whitespace-nowrap">구간 및 유종</th>
               <th className="w-[180px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-right whitespace-nowrap">정산 금액</th>
-              <th className="w-[100px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-center whitespace-nowrap">작업</th>
+              <th className="w-[120px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-center whitespace-nowrap">작업</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -1202,68 +1329,147 @@ const HistoryTable = ({ logs, onDelete }) => {
                 </td>
               </tr>
             ) : (
-              logs.map((log) => (
-                <tr key={log.id} className="group hover:bg-slate-50/50 transition-all border-b border-slate-50 last:border-0">
-                  <td className="px-8 py-7">
-                    <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.date}</div>
-                    <div className="text-[11px] font-bold text-slate-400 flex items-center gap-2 mt-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
-                      {log.userName}
-                    </div>
-                  </td>
-                  <td className="px-8 py-7">
-                    <div className="text-[13px] font-bold text-slate-700 flex flex-wrap items-center gap-1.5 leading-relaxed max-w-xl">
-                      {log.routeSummary ? (
-                        log.routeSummary.split(' → ').map((stop, sIdx, arr) => (
-                          <React.Fragment key={sIdx}>
-                            <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500 whitespace-nowrap">{stop}</span>
-                            {sIdx < arr.length - 1 && <ChevronRight size={10} className="text-slate-300 shrink-0 mx-0.5" />}
-                          </React.Fragment>
-                        ))
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500">{log.departure}</span>
-                          <ChevronRight size={12} className="text-slate-300" /> 
-                          <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500">{log.destination}</span>
+              logs.map((log) => {
+                const locked = isLogLocked(log);
+                const isPending = log.requestStatus === 'pending';
+                const isApproved = log.requestStatus === 'approved';
+                return (
+                  <tr key={log.id} className="group hover:bg-slate-50/50 transition-all border-b border-slate-50 last:border-0 relative">
+                    <td className="px-8 py-7">
+                      <div className="flex items-center gap-2">
+                        <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.date}</div>
+                        {locked && (
+                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tight shrink-0">
+                            <Lock size={8} />
+                            마감
+                          </span>
+                        )}
+                        {isApproved && (
+                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tight shrink-0">
+                            승인됨
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-bold text-slate-400 flex items-center gap-2 mt-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
+                        {log.userName}
+                      </div>
+                    </td>
+                    <td className="px-8 py-7">
+                      <div className="text-[13px] font-bold text-slate-700 flex flex-wrap items-center gap-1.5 leading-relaxed max-w-xl">
+                        {log.routeSummary ? (
+                          log.routeSummary.split(' → ').map((stop, sIdx, arr) => (
+                            <React.Fragment key={sIdx}>
+                              <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500 whitespace-nowrap">{stop}</span>
+                              {sIdx < arr.length - 1 && <ChevronRight size={10} className="text-slate-300 shrink-0 mx-0.5" />}
+                            </React.Fragment>
+                          ))
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500">{log.departure}</span>
+                            <ChevronRight size={12} className="text-slate-300" /> 
+                            <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500">{log.destination}</span>
+                          </div>
+                        )}
+                      </div>
+                      {log.purpose && (
+                        <div className="text-[10px] font-black text-indigo-500 mt-2.5 bg-indigo-50/50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5">
+                          <FileText size={10} />
+                          {log.purpose}
                         </div>
                       )}
-                    </div>
-                    {log.purpose && (
-                      <div className="text-[10px] font-black text-indigo-500 mt-2.5 bg-indigo-50/50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5">
-                        <FileText size={10} />
-                        {log.purpose}
+                      {isPending && (
+                        <div className="mt-2 text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md inline-block">
+                           관리자 보정 승인 대기 중 ({log.requestType === 'delete' ? '삭제' : '수정'} 요청)
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-8 py-7 text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.distance} <span className="text-[10px] font-bold text-slate-400">km</span></div>
+                        <div className={`text-[9px] px-2 py-1 rounded-lg font-black inline-block uppercase tracking-tight shrink-0 ${
+                          log.fuelType === 'gasoline' ? 'bg-indigo-50 text-indigo-600' : 
+                          log.fuelType === 'diesel' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                        }`}>
+                          {log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG'}
+                        </div>
                       </div>
-                    )}
-                  </td>
-                  <td className="px-8 py-7 text-right">
-                    <div className="flex items-center justify-end gap-3">
-                      <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.distance} <span className="text-[10px] font-bold text-slate-400">km</span></div>
-                      <div className={`text-[9px] px-2 py-1 rounded-lg font-black inline-block uppercase tracking-tight shrink-0 ${
-                        log.fuelType === 'gasoline' ? 'bg-indigo-50 text-indigo-600' : 
-                        log.fuelType === 'diesel' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
-                      }`}>
-                        {log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG'}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-8 py-7 text-right">
-                    <div className="font-black text-indigo-600 text-[17px] whitespace-nowrap tracking-tight">{Number(log.amount || 0).toLocaleString()} <span className="text-[11px] font-bold opacity-60">원</span></div>
-                    {log.parkingTotal > 0 && (
-                      <div className="text-[9px] font-bold text-slate-400 mt-1">
-                        (유류 {Number(log.fuelAmount || 0).toLocaleString()} + 주차 {Number(log.parkingTotal).toLocaleString()})
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-8 py-7 text-center">
-                    <button 
-                      onClick={() => onDelete(log.id)}
-                      className="p-3 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all active:scale-90"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))
+                    </td>
+                    <td className="px-8 py-7 text-right">
+                      <div className="font-black text-indigo-600 text-[17px] whitespace-nowrap tracking-tight">{Number(log.amount || 0).toLocaleString()} <span className="text-[11px] font-bold opacity-60">원</span></div>
+                      {log.parkingTotal > 0 && (
+                        <div className="text-[9px] font-bold text-slate-400 mt-1">
+                          (유류 {Number(log.fuelAmount || 0).toLocaleString()} + 주차 {Number(log.parkingTotal).toLocaleString()})
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-8 py-7 text-center">
+                      {(locked || isPending) && !isAdmin ? (
+                        <div className="flex flex-col gap-1 items-center">
+                          {isPending ? (
+                            <div className="p-3 text-blue-300 animate-pulse"><History size={18} /></div>
+                          ) : isApproved ? (
+                            <div className="flex gap-1 animate-bounce">
+                              <button 
+                                onClick={() => onEdit(log)}
+                                className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                                title="승인됨: 수정하기"
+                              >
+                                <Settings size={18} />
+                              </button>
+                              <button 
+                                onClick={() => onDelete(log.id)}
+                                className="p-3 bg-red-50 text-red-600 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                                title="승인됨: 삭제하기"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-1">
+                              <button 
+                                onClick={() => setRequestModal({ show: true, logId: log.id, type: 'edit' })}
+                                className="p-2 text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+                                title="수정 요청"
+                              >
+                                <Settings size={16} />
+                              </button>
+                              <button 
+                                onClick={() => setRequestModal({ show: true, logId: log.id, type: 'delete' })}
+                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                title="삭제 요청"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex justify-center gap-1">
+                          <button 
+                            onClick={() => onEdit(log)}
+                            className="p-3 text-slate-200 hover:text-indigo-500 hover:bg-indigo-50 rounded-2xl transition-all active:scale-90"
+                            title="수정"
+                          >
+                            <Settings size={18} />
+                          </button>
+                          <button 
+                            onClick={() => onDelete(log.id)}
+                            className={`p-3 rounded-2xl transition-all active:scale-90 ${
+                              locked && isAdmin
+                                ? 'text-red-300 hover:text-red-600 hover:bg-red-50 border border-dashed border-red-200'
+                                : 'text-slate-200 hover:text-red-500 hover:bg-red-50'
+                            }`}
+                            title={locked && isAdmin ? '관리자 강제 삭제' : '삭제'}
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -1554,36 +1760,63 @@ const MyPage = ({ profile, onUpdate }) => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">차량 별명</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                  차량 별명 <span className="text-red-500 ml-0.5">*</span>
+                </label>
                 <input 
                    type="text" 
-                   className="w-full px-4 py-3 rounded-xl bg-white border border-slate-100 focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700 text-sm"
-                   placeholder="예: 쏘렌토"
+                   className={`w-full px-4 py-3 rounded-xl bg-white border-2 focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700 text-sm ${
+                     !localProfile.vehicleName ? 'border-red-200 focus:border-red-400' : 'border-slate-100 focus:border-indigo-400'
+                   }`}
+                   placeholder="예: 쏘렌토  (필수 입력)"
                    value={localProfile.vehicleName}
                    onChange={(e) => setLocalProfile({...localProfile, vehicleName: e.target.value})}
                 />
+                {!localProfile.vehicleName && (
+                  <p className="text-[10px] font-black text-red-400 ml-1">차량 별명을 입력해 주세요</p>
+                )}
              </div>
              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">기본 유종</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                  기본 유종 <span className="text-red-500 ml-0.5">*</span>
+                </label>
                 <select 
-                   className="w-full px-4 py-3 rounded-xl bg-white border border-slate-100 focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700 text-sm appearance-none"
+                   className={`w-full px-4 py-3 rounded-xl bg-white border-2 focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700 text-sm appearance-none ${
+                     !localProfile.fuelType ? 'border-red-200 focus:border-red-400' : 'border-slate-100 focus:border-indigo-400'
+                   }`}
                    value={localProfile.fuelType}
                    onChange={(e) => setLocalProfile({...localProfile, fuelType: e.target.value})}
                 >
+                   <option value="">유종 선택 (필수)</option>
                    <option value="gasoline">휘발유 (Gasoline)</option>
                    <option value="diesel">경유 (Diesel)</option>
                    <option value="lpg">액화석유가스 (LPG)</option>
                 </select>
+                {!localProfile.fuelType && (
+                  <p className="text-[10px] font-black text-red-400 ml-1">유종을 선택해 주세요</p>
+                )}
              </div>
           </div>
         </section>
 
-        <div className="pt-2">
           <button 
-            onClick={() => onUpdate(localProfile)}
-            className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 text-base"
+            onClick={() => {
+              if (!localProfile.vehicleName || !localProfile.fuelType) {
+                showStatus("차량 별명과 유종은 필수 입력 사항입니다.", "error");
+                return;
+              }
+              onUpdate(localProfile);
+            }}
+            disabled={!localProfile.vehicleName || !localProfile.fuelType}
+            className={`w-full py-4 rounded-xl font-black shadow-lg transition-all active:scale-95 text-base ${
+              !localProfile.vehicleName || !localProfile.fuelType
+                ? 'bg-slate-200 text-slate-400 shadow-none cursor-not-allowed'
+                : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700'
+            }`}
           >
-            개인 설정값 저장하기
+            {(!localProfile.vehicleName || !localProfile.fuelType)
+              ? '차량 정보 입력 후 저장 가능'
+              : '개인 설정값 저장하기'}
           </button>
         </div>
       </div>
@@ -1627,19 +1860,26 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
     )}
 
     <div className="flex lg:flex-col flex-1 gap-1 lg:gap-2">
-      <NavItem isCollapsed={isCollapsed} icon={<LayoutDashboard />} label="대시보드" active={currentView === 'dashboard'} onClick={() => onNavigate('dashboard')} />
-      <NavItem isCollapsed={isCollapsed} icon={<PlusCircle />} label="신규 운행" active={currentView === 'log'} onClick={() => onNavigate('log')} />
-      <NavItem isCollapsed={isCollapsed} icon={<History />} label="정산 내역" active={currentView === 'history'} onClick={() => onNavigate('history')} />
-      {isAdmin && (
-        <>
-          <div className={`hidden lg:block h-px bg-slate-100 my-3 ${isCollapsed ? 'mx-2' : 'mx-4'}`}></div>
-          <NavItem isCollapsed={isCollapsed} icon={<FileText />} label="운행 통계" active={currentView === 'reports'} onClick={() => onNavigate('reports')} />
-          <NavItem isCollapsed={isCollapsed} icon={<Settings />} label="기준 단가" active={currentView === 'settings'} onClick={() => onNavigate('settings')} />
-          <NavItem isCollapsed={isCollapsed} icon={<Users />} label="인사 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} />
-        </>
-      )}
-      <div className="flex-1 hidden lg:block"></div>
-      <NavItem isCollapsed={isCollapsed} icon={<UserCircle />} label="내 정보" active={currentView === 'profile'} onClick={() => onNavigate('profile')} />
+      {(() => {
+        const profileIncomplete = !userProfile?.vehicleName || !userProfile?.fuelType;
+        return (
+          <>
+            <NavItem isCollapsed={isCollapsed} icon={<LayoutDashboard />} label="대시보드" active={currentView === 'dashboard'} onClick={() => { onNavigate('dashboard'); setEditingLog(null); }} disabled={profileIncomplete} />
+            <NavItem isCollapsed={isCollapsed} icon={<PlusCircle />} label="신규 운행" active={currentView === 'log'} onClick={() => { onNavigate('log'); setEditingLog(null); }} disabled={profileIncomplete} />
+            <NavItem isCollapsed={isCollapsed} icon={<History />} label="정산 내역" active={currentView === 'history'} onClick={() => { onNavigate('history'); setEditingLog(null); }} disabled={profileIncomplete} />
+            {isAdmin && (
+              <>
+                <div className={`hidden lg:block h-px bg-slate-100 my-3 ${isCollapsed ? 'mx-2' : 'mx-4'}`}></div>
+                <NavItem isCollapsed={isCollapsed} icon={<FileText />} label="운행 통계" active={currentView === 'reports'} onClick={() => onNavigate('reports')} disabled={profileIncomplete} />
+                <NavItem isCollapsed={isCollapsed} icon={<Settings />} label="기준 단가" active={currentView === 'settings'} onClick={() => onNavigate('settings')} disabled={profileIncomplete} />
+                <NavItem isCollapsed={isCollapsed} icon={<Users />} label="인사 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} disabled={profileIncomplete} />
+              </>
+            )}
+            <div className="flex-1 hidden lg:block"></div>
+            <NavItem isCollapsed={isCollapsed} icon={<UserCircle />} label="내 정보" active={currentView === 'profile'} onClick={() => onNavigate('profile')} />
+          </>
+        );
+      })()}
       <button 
         onClick={onLogout}
         className={`hidden lg:flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-5'} py-4 rounded-2xl text-[13px] font-bold text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all mt-4`}
@@ -1849,10 +2089,11 @@ const InputLabel = ({ label }) => (
   </label>
 );
 
-const AdminPanel = ({ db, appId, orgUnits, setOrgUnits }) => {
+const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, onRejectRequest }) => {
   const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
+  const [activeTab, setActiveTab] = useState('users'); // 'users' or 'requests'
 
   useEffect(() => {
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
@@ -1862,6 +2103,10 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits }) => {
 
     return () => unsubscribe();
   }, [db, appId]);
+
+  const pendingRequests = useMemo(() => {
+    return logs.filter(log => log.requestStatus === 'pending');
+  }, [logs]);
 
   const updateOrgUnitsRemote = async (newUnits) => {
     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'orgUnits'), { units: newUnits });
@@ -1890,153 +2135,236 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits }) => {
 
   return (
     <div className="space-y-10">
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <div className="xl:col-span-2 space-y-6">
-          <div className="flex items-center justify-between px-2">
-            <h3 className="text-xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
-              <Users className="text-indigo-600" /> 구성원 및 권한 관리
-            </h3>
-            <span className="bg-indigo-50 px-3 py-1 rounded-full text-[10px] font-black text-indigo-500 uppercase tracking-widest">
-              Total {filteredUsers.length} Users
+      <div className="flex gap-4 p-2 bg-slate-100/50 rounded-[2rem] w-fit">
+        <button 
+          onClick={() => setActiveTab('users')}
+          className={`px-8 py-4 rounded-2xl font-black text-sm transition-all ${activeTab === 'users' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          인사 및 조직 관리
+        </button>
+        <button 
+          onClick={() => setActiveTab('requests')}
+          className={`px-8 py-4 rounded-2xl font-black text-sm transition-all flex items-center gap-3 ${activeTab === 'requests' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          마감 보정 요청
+          {pendingRequests.length > 0 && (
+            <span className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] animate-pulse">
+              {pendingRequests.length}
             </span>
-          </div>
+          )}
+        </button>
+      </div>
 
-          <div className="flex flex-col md:flex-row gap-4 px-2">
-            <div className="flex-[2] relative">
-              <Search size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="성함 또는 이메일로 검색" 
-                className="w-full pl-14 pr-6 py-4 rounded-2xl bg-white border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:border-indigo-400 transition-all font-bold text-slate-700 placeholder:text-slate-300 text-[13px] shadow-sm"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
+      {activeTab === 'users' ? (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          <div className="xl:col-span-2 space-y-6">
+            <div className="flex items-center justify-between px-2">
+              <h3 className="text-xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
+                <Users className="text-indigo-600" /> 구성원 및 권한 관리
+              </h3>
+              <span className="bg-indigo-50 px-3 py-1 rounded-full text-[10px] font-black text-indigo-500 uppercase tracking-widest">
+                Total {filteredUsers.length} Users
+              </span>
             </div>
-            <div className="flex-1 relative">
-              <Users size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
-              <select 
-                className="w-full pl-14 pr-10 py-4 rounded-2xl bg-white border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:border-indigo-400 transition-all font-bold text-slate-700 appearance-none cursor-pointer text-[13px] shadow-sm"
-                value={deptFilter}
-                onChange={e => setDeptFilter(e.target.value)}
-              >
-                <option value="all">전체 부서 필터</option>
-                {orgUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
-                <option value="미지정">부서 미지정</option>
-              </select>
-              <ChevronRight size={16} className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
-            </div>
-          </div>
 
-          <div className="premium-card rounded-[2.5rem] overflow-hidden">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50/50 border-b border-slate-100">
-                <tr>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">사용자 정보</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">부서 / 권한</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">상태</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">관리</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filteredUsers.map(u => (
-                  <tr key={u.uid} className="hover:bg-slate-50/30 transition-colors group">
-                    <td className="px-8 py-6">
-                      <div className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors">{u.userName}</div>
-                      <div className="text-[11px] font-bold text-slate-400">{u.email}</div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <select 
-                        className="bg-slate-50 text-[11px] font-black px-3 py-2 rounded-xl border-none outline-none focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer"
-                        value={u.department}
-                        onChange={(e) => updateUser(u.uid, { department: e.target.value })}
-                      >
-                        {orgUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
-                        <option value="미지정">미지정</option>
-                      </select>
-                      <div className="mt-2 flex items-center gap-1">
-                        <select 
-                          className={`text-[9px] font-black px-2 py-1 rounded-lg border-none outline-none focus:ring-1 focus:ring-indigo-200 transition-all cursor-pointer uppercase ${
-                            u.role === 'admin' ? 'bg-indigo-600 text-white' : 
-                            u.role === 'manager' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'
-                          }`}
-                          value={u.role}
-                          onChange={(e) => updateUser(u.uid, { role: e.target.value })}
-                        >
-                          <option value="staff">General Staff</option>
-                          <option value="manager">Team Manager</option>
-                          <option value="admin">Administrator</option>
-                        </select>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6 text-center">
-                      <button 
-                        onClick={() => updateUser(u.uid, { status: u.status === 'approved' ? 'pending' : 'approved' })}
-                        className={`text-[10px] font-black px-4 py-2 rounded-xl transition-all ${
-                          u.status === 'approved' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600 ring-2 ring-amber-200'
-                        }`}
-                      >
-                        {u.status === 'approved' ? '정식 승인됨' : '승인 대기중'}
-                      </button>
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                      <div className="flex justify-end gap-2">
-                         <button 
-                           onClick={() => updateUser(u.uid, { role: u.role === 'admin' ? 'staff' : 'admin' })}
-                           className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
-                           title="권한 변경"
-                         >
-                           <Settings size={18} />
-                         </button>
-                         <button 
-                           onClick={() => deleteUser(u.uid)}
-                           className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                         >
-                           <Trash2 size={18} />
-                         </button>
-                      </div>
-                    </td>
+            <div className="flex flex-col md:flex-row gap-4 px-2">
+              <div className="flex-[2] relative">
+                <Search size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input 
+                  type="text" 
+                  placeholder="성함 또는 이메일로 검색" 
+                  className="w-full pl-14 pr-6 py-4 rounded-2xl bg-white border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:border-indigo-400 transition-all font-bold text-slate-700 placeholder:text-slate-300 text-[13px] shadow-sm"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <div className="flex-1 relative">
+                <Users size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+                <select 
+                  className="w-full pl-14 pr-10 py-4 rounded-2xl bg-white border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:border-indigo-400 transition-all font-bold text-slate-700 appearance-none cursor-pointer text-[13px] shadow-sm"
+                  value={deptFilter}
+                  onChange={e => setDeptFilter(e.target.value)}
+                >
+                  <option value="all">전체 부서 필터</option>
+                  {orgUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                  <option value="미지정">부서 미지정</option>
+                </select>
+                <ChevronRight size={16} className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 rotate-90 pointer-events-none" />
+              </div>
+            </div>
+
+            <div className="premium-card rounded-[2.5rem] overflow-hidden">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50/50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">사용자 정보</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">부서 / 권한</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">상태</th>
+                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">관리</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {filteredUsers.map(u => (
+                    <tr key={u.uid} className="hover:bg-slate-50/30 transition-colors group">
+                      <td className="px-8 py-6">
+                        <div className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors">{u.userName}</div>
+                        <div className="text-[11px] font-bold text-slate-400">{u.email}</div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <select 
+                          className="bg-slate-50 text-[11px] font-black px-3 py-2 rounded-xl border-none outline-none focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer"
+                          value={u.department}
+                          onChange={(e) => updateUser(u.uid, { department: e.target.value })}
+                        >
+                          {orgUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                          <option value="미지정">미지정</option>
+                        </select>
+                        <div className="mt-2 flex items-center gap-1">
+                          <select 
+                            className={`text-[9px] font-black px-2 py-1 rounded-lg border-none outline-none focus:ring-1 focus:ring-indigo-200 transition-all cursor-pointer uppercase ${
+                              u.role === 'admin' ? 'bg-indigo-600 text-white' : 
+                              u.role === 'manager' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'
+                            }`}
+                            value={u.role}
+                            onChange={(e) => updateUser(u.uid, { role: e.target.value })}
+                          >
+                            <option value="staff">General Staff</option>
+                            <option value="manager">Team Manager</option>
+                            <option value="admin">Administrator</option>
+                          </select>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6 text-center">
+                        <button 
+                          onClick={() => updateUser(u.uid, { status: u.status === 'approved' ? 'pending' : 'approved' })}
+                          className={`text-[10px] font-black px-4 py-2 rounded-xl transition-all ${
+                            u.status === 'approved' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600 ring-2 ring-amber-200'
+                          }`}
+                        >
+                          {u.status === 'approved' ? '정식 승인됨' : '승인 대기중'}
+                        </button>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <div className="flex justify-end gap-2">
+                           <button 
+                             onClick={() => updateUser(u.uid, { role: u.role === 'admin' ? 'staff' : 'admin' })}
+                             className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                             title="권한 변경"
+                           >
+                             <Settings size={18} />
+                           </button>
+                           <button 
+                             onClick={() => deleteUser(u.uid)}
+                             className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                           >
+                             <Trash2 size={18} />
+                           </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
 
-         <div className="space-y-6">
+          <div className="space-y-6">
             <h3 className="text-xl font-black text-slate-800 px-2 tracking-tight">조직 구성 관리</h3>
             <div className="premium-card p-8 rounded-[2.5rem] space-y-6">
-               <p className="text-xs font-bold text-slate-400 leading-relaxed">회사의 부서 체계를 관리합니다. 등록된 부서는 직원 프로필 설정에서 바로 선택할 수 있습니다.</p>
-               <div className="space-y-3">
-                 {orgUnits.map((unit, idx) => (
-                   <div key={idx} className="flex items-center justify-between p-4 bg-slate-50/50 border border-slate-100 rounded-2xl group hover:border-indigo-200 hover:bg-indigo-50/20 transition-all">
-                     <span className="font-black text-slate-700 group-hover:text-indigo-600 transition-colors uppercase tracking-tight text-sm">{unit}</span>
-                     <button 
-                       onClick={() => updateOrgUnitsRemote(orgUnits.filter((_, i) => i !== idx))} 
-                       className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all p-1"
-                     >
-                       <Trash2 size={16} />
-                     </button>
-                   </div>
-                 ))}
-               </div>
-               <div className="pt-4">
-                 <input 
-                   type="text" 
-                   placeholder="새 부서 추가 (엔터)"
-                   className="w-full px-6 py-5 rounded-2xl border-2 border-dashed border-slate-100 focus:border-indigo-400 focus:bg-white outline-none font-black text-sm transition-all text-slate-600"
-                   value={newOrgUnit}
-                   onChange={(e) => setNewOrgUnit(e.target.value)}
-                   onKeyDown={(e) => {
-                     if (e.key === 'Enter' && !e.nativeEvent.isComposing && newOrgUnit.trim()) {
-                       updateOrgUnitsRemote([...orgUnits, newOrgUnit.trim()]);
-                       setNewOrgUnit('');
-                     }
-                   }}
-                 />
-               </div>
+              <p className="text-xs font-bold text-slate-400 leading-relaxed">회사의 부서 체계를 관리합니다. 등록된 부서는 직원 프로필 설정에서 바로 선택할 수 있습니다.</p>
+              <div className="space-y-3">
+                {orgUnits.map((unit, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-4 bg-slate-50/50 border border-slate-100 rounded-2xl group hover:border-indigo-200 hover:bg-indigo-50/20 transition-all">
+                    <span className="font-black text-slate-700 group-hover:text-indigo-600 transition-colors uppercase tracking-tight text-sm">{unit}</span>
+                    <button 
+                      onClick={() => updateOrgUnitsRemote(orgUnits.filter((_, i) => i !== idx))} 
+                      className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all p-1"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="pt-4">
+                <input 
+                  type="text" 
+                  placeholder="새 부서 추가 (엔터)"
+                  className="w-full px-6 py-5 rounded-2xl border-2 border-dashed border-slate-100 focus:border-indigo-400 focus:bg-white outline-none font-black text-sm transition-all text-slate-600"
+                  value={newOrgUnit}
+                  onChange={(e) => setNewOrgUnit(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing && newOrgUnit.trim()) {
+                      updateOrgUnitsRemote([...orgUnits, newOrgUnit.trim()]);
+                      setNewOrgUnit('');
+                    }
+                  }}
+                />
+              </div>
             </div>
-         </div>
-      </div>
+          </div>
+        </div>
+      ) : (
+        <div className="animate-fade-in space-y-6">
+          <div className="flex items-center justify-between px-2">
+             <h3 className="text-xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
+               <History className="text-orange-500" /> 보정 요청 검토
+             </h3>
+             <span className="bg-orange-50 px-3 py-1 rounded-full text-[10px] font-black text-orange-500 uppercase tracking-widest">
+               {pendingRequests.length} Pending Actions
+             </span>
+          </div>
+
+          {pendingRequests.length === 0 ? (
+            <div className="premium-card p-20 flex flex-col items-center justify-center text-center">
+               <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6">
+                  <FileText size={40} />
+               </div>
+               <h4 className="text-xl font-black text-slate-800">모든 요청이 처리되었습니다.</h4>
+               <p className="text-sm font-bold text-slate-400 mt-2">현재 검토 대기 중인 보정 요청이 없습니다.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6">
+               {pendingRequests.map(request => (
+                 <div key={request.id} className="premium-card p-8 flex flex-col lg:flex-row gap-8 items-start lg:items-center justify-between group">
+                    <div className="flex-1 space-y-4">
+                       <div className="flex items-center gap-3">
+                          <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${request.requestType === 'delete' ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
+                             {request.requestType === 'delete' ? '삭제 요청' : '수정 요청'}
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-400">요청일: {new Date(request.requestedAt).toLocaleString()}</span>
+                       </div>
+                       <div>
+                          <h5 className="text-lg font-black text-slate-900">{request.userName} 님의 요청</h5>
+                          <p className="text-sm font-bold text-slate-500 mt-1 max-w-2xl leading-relaxed">
+                             <span className="text-indigo-600 font-black">사유:</span> {request.requestReason}
+                          </p>
+                       </div>
+                       <div className="bg-slate-50 p-4 rounded-2xl flex flex-wrap gap-4 text-[11px] font-black text-slate-500 italic">
+                          <span>{request.date} 운행</span>
+                          <span>{request.routeSummary}</span>
+                          <span>{Number(request.amount).toLocaleString()}원</span>
+                       </div>
+                    </div>
+                    <div className="flex gap-3 w-full lg:w-auto">
+                       <button 
+                         onClick={() => onRejectRequest(request.id)}
+                         className="flex-1 lg:flex-none px-8 py-4 rounded-2xl font-black text-slate-500 border border-slate-100 hover:bg-slate-50 transition-all"
+                       >
+                         반려
+                       </button>
+                       <button 
+                         onClick={() => onApproveRequest(request)}
+                         className={`flex-1 lg:flex-none px-8 py-4 rounded-2xl font-black text-white shadow-xl transition-all ${request.requestType === 'delete' ? 'bg-red-500 hover:bg-red-600 shadow-red-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'}`}
+                       >
+                         요청 승인
+                       </button>
+                    </div>
+                 </div>
+               ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
