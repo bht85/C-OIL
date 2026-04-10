@@ -717,7 +717,10 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
       setFormData({
         ...initialData,
         date: initialData.date || new Date().toISOString().split('T')[0],
-        waypoints: initialData.waypoints || [],
+        waypoints: initialData.waypoints || [
+          { id: 'start', label: '출발지', address: initialData.departure || '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780, parkingFee: 0, parkingNote: '' },
+          { id: 'end', label: '도착지', address: initialData.destination || '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
+        ],
         isManualDistance: initialData.isManualDistance || false
       });
     } else if (profile?.fuelType) {
@@ -900,6 +903,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
     
     // 이력 저장을 위해 보낼 데이터 가공 (별칭 포함)
     const payload = {
+      ...formData,
       date: formData.date,
       departure: formData.waypoints[0].address,
       destination: formData.waypoints[formData.waypoints.length - 1].address,
@@ -909,6 +913,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
       amount: calculatedAmount,
       parkingTotal: formData.waypoints.reduce((acc, wp) => acc + (Number(wp.parkingFee) || 0), 0),
       fuelAmount: calculatedAmount - formData.waypoints.reduce((acc, wp) => acc + (Number(wp.parkingFee) || 0), 0),
+      waypoints: formData.waypoints, 
       routeSummary: formData.waypoints
         .map(w => {
           let base = `[${w.alias}${w.purpose ? ` (${w.purpose})` : ''}`;
