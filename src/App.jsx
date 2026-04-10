@@ -1820,8 +1820,7 @@ const MyPage = ({ profile, onUpdate }) => {
           </button>
         </div>
       </div>
-    </div>
-  );
+    );
 };
 
 // --- Enhanced Components ---
