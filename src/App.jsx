@@ -717,7 +717,21 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
       setFormData({
         ...initialData,
         date: initialData.date || new Date().toISOString().split('T')[0],
-        waypoints: initialData.waypoints || [
+        waypoints: initialData.waypoints || (initialData.routeSummary ? initialData.routeSummary.split(' → ').map((segment, idx) => {
+          const match = segment.match(/^\[(.*?)(?:\s\((.*?)\))?(?:\s\[P\s([\d,]+)\])?\]\s(.*)$/);
+          if (match) {
+            return {
+              id: idx === 0 ? 'start' : idx === initialData.routeSummary.split(' → ').length - 1 ? 'end' : `mid_${idx}`,
+              label: idx === 0 ? '출발지' : idx === initialData.routeSummary.split(' → ').length - 1 ? '도착지' : '경유지',
+              alias: match[1] || '',
+              purpose: match[2] || '',
+              parkingFee: match[3] ? Number(match[3].replace(/,/g, '')) : 0,
+              address: match[4] || '',
+              lat: 37.5665, lng: 126.9780 // 기본값
+            };
+          }
+          return null;
+        }).filter(Boolean) : null) || [
           { id: 'start', label: '출발지', address: initialData.departure || '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780, parkingFee: 0, parkingNote: '' },
           { id: 'end', label: '도착지', address: initialData.destination || '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
         ],
