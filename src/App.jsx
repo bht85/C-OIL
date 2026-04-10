@@ -524,7 +524,7 @@ const App = () => {
             </div>
           )}
           {view === 'dashboard' && <Dashboard logs={logs} />}
-          {view === 'log' && <LogEntryForm fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} />}
+          {view === 'log' && <LogEntryForm fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} />}
           {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} isAdmin={isAdmin} onRequestCorrection={requestCorrection} onUpdateLog={saveLog} onEdit={(log) => { setEditingLog(log); setView('log'); }} />}
           {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} />}
           {view === 'settings' && <SettingsPanel fuelRates={fuelRates} onUpdate={updateSettings} db={db} appId={appId} />}
@@ -696,7 +696,7 @@ const EmptyChart = ({ message }) => (
   </div>
 );
 
-const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
+const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
   const [favSelectorIdx, setFavSelectorIdx] = useState(null);
   const [favSearch, setFavSearch] = useState('');
 
@@ -983,6 +983,16 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
               type="date" 
               className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-bold text-slate-700" 
               value={formData.date}
+              min={(() => {
+                if (isAdmin) return undefined;
+                const d = new Date();
+                d.setDate(d.getDate() - 1);
+                return d.toISOString().split('T')[0];
+              })()}
+              max={(() => {
+                if (isAdmin) return undefined;
+                return new Date().toISOString().split('T')[0];
+              })()}
               onChange={e => setFormData({...formData, date: e.target.value})}
             />
           </InputGroup>
