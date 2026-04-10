@@ -491,6 +491,7 @@ const App = () => {
         userProfile={profile} 
         isCollapsed={isSidebarCollapsed}
         onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        setEditingLog={setEditingLog}
       />
       <div className={`flex-1 transition-all duration-500 ease-in-out ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-72'} min-h-screen`}>
         <div className="p-6 lg:p-10 max-w-7xl mx-auto">
@@ -727,19 +728,23 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
             let purpose = "";
             let parkingFee = 0;
 
-            // 주차비 [P 50,000] 추출
-            const pMatch = infoPart.match(/\[P\s([\d,]+)\]/);
+            // 주차비 [P 50,000] 추출 (안쪽의 [P...]부터 제거)
+            const pMatch = infoPart.match(/\[P\s?([\d,]+)\]/);
             if (pMatch) {
               parkingFee = Number(pMatch[1].replace(/,/g, ''));
-              alias = alias.replace(/\s?\[P\s[\d,]+\]/, "").trim();
+              infoPart = infoPart.replace(/\[P\s?[\d,]+\]/, "").trim();
             }
 
             // 방문 목적 (목적) 추출 - 맨 뒤의 괄호 탐색
-            const purpMatch = alias.match(/\s\(([^)]+)\)$/);
+            let alias = infoPart;
+            const purpMatch = alias.match(/\s?\(([^)]+)\)$/);
             if (purpMatch) {
               purpose = purpMatch[1];
               alias = alias.replace(/\s?\([^)]+\)$/, "").trim();
             }
+
+            // 남은 대괄호 찌꺼기 제거 (중첩 괄호 대응)
+            alias = alias.replace(/[\[\]]/g, "").trim();
 
             return {
               id: idx === 0 ? 'start' : idx === initialData.routeSummary.split(' → ').length - 1 ? 'end' : `mid_${idx}`,
@@ -748,7 +753,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
               purpose: purpose,
               parkingFee: parkingFee,
               address: address,
-              lat: 37.5665, lng: 126.9780 // 기본값, 추후 지오코딩 필요
+              lat: 37.5665, lng: 126.9780 // 기본값
             };
           }
           return null;
@@ -1866,7 +1871,7 @@ const MyPage = ({ profile, onUpdate }) => {
 
 // --- Enhanced Components ---
 
-const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCollapsed, onToggle }) => (
+const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCollapsed, onToggle, setEditingLog }) => (
   <nav className={`fixed bottom-0 lg:top-0 left-0 w-full ${isCollapsed ? 'lg:w-20' : 'lg:w-72'} bg-white border-t lg:border-t-0 lg:border-r border-slate-100 flex lg:flex-col p-4 lg:p-6 z-50 transition-all duration-500 ease-in-out`}>
     <div className={`hidden lg:flex items-center ${isCollapsed ? 'justify-center mb-10' : 'justify-between mb-12 px-2'}`}>
       <div className="flex items-center gap-4">
