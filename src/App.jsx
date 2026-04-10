@@ -718,42 +718,41 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
       setFormData({
         ...initialData,
         date: initialData.date || new Date().toISOString().split('T')[0],
-        waypoints: initialData.waypoints || (initialData.routeSummary ? initialData.routeSummary.split(' → ').map((segment, idx) => {
-          // 단계적 파싱: [정보] 주소 형태 분리
+        waypoints: initialData.waypoints || (initialData.routeSummary ? initialData.routeSummary.split(/\s[→>]\s/).map((segment, idx, allSegs) => {
           const outerMatch = segment.match(/^\[(.*)\]\s(.*)$/);
           if (outerMatch) {
             let infoPart = outerMatch[1];
-            const address = outerMatch[2];
-            let alias = infoPart;
+            let address = outerMatch[2];
             let purpose = "";
             let parkingFee = 0;
 
-            // 주차비 [P 50,000] 추출 (안쪽의 [P...]부터 제거)
             const pMatch = infoPart.match(/\[P\s?([\d,]+)\]/);
             if (pMatch) {
               parkingFee = Number(pMatch[1].replace(/,/g, ''));
               infoPart = infoPart.replace(/\[P\s?[\d,]+\]/, "").trim();
             }
 
-            // 방문 목적 (목적) 추출 - 맨 뒤의 괄호 탐색
+            let alias = infoPart;
             const purpMatch = alias.match(/\s?\(([^)]+)\)$/);
             if (purpMatch) {
               purpose = purpMatch[1];
               alias = alias.replace(/\s?\([^)]+\)$/, "").trim();
             }
 
-            // 남은 대괄호 찌꺼기 제거 (중첩 괄호 대응)
             alias = alias.replace(/[\[\]]/g, "").trim();
 
             return {
-              id: idx === 0 ? 'start' : idx === initialData.routeSummary.split(' → ').length - 1 ? 'end' : `mid_${idx}`,
-              label: idx === 0 ? '출발지' : idx === initialData.routeSummary.split(' → ').length - 1 ? '도착지' : '경유지',
+              id: idx === 0 ? 'start' : idx === allSegs.length - 1 ? 'end' : `mid_${idx}`,
+              label: idx === 0 ? '출발지' : idx === allSegs.length - 1 ? '도착지' : '경유지',
               alias: alias,
               purpose: purpose,
               parkingFee: parkingFee,
               address: address,
-              lat: 37.5665, lng: 126.9780 // 기본값
+              lat: 37.5665, lng: 126.9780 
             };
+          }
+          return null;
+        }).filter(Boolean) : null) || [
           }
           return null;
         }).filter(Boolean) : null) || [
