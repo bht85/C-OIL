@@ -205,12 +205,16 @@ const App = () => {
     const logsQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), orderBy('date', 'desc'));
     const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
       const logsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(log => profile?.role === 'admin' || log.userId === user.uid);
+        .filter(log => {
+          if (profile?.role === 'admin') return true;
+          if (profile?.role === 'manager') return log.department === profile.department || log.userId === user.uid;
+          return log.userId === user.uid;
+        });
       setLogs(logsData);
     });
 
     return () => unsubscribeLogs();
-  }, [user, profile?.role, profile?.status]);
+  }, [user, profile?.role, profile?.status, profile?.department]);
 
   const showStatus = (msg, type = 'success') => {
     setStatusMessage({ msg: String(msg), type });
@@ -280,6 +284,7 @@ const App = () => {
         ...logData,
         userId: user.uid,
         userName: profile?.userName || user.email,
+        department: profile?.department || '미지정', // 팀장 권한 조회를 위해 부서 정보 추가
         createdAt: new Date().toISOString()
       });
       showStatus("저장되었습니다.");
@@ -1895,9 +1900,21 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits }) => {
                         onChange={(e) => updateUser(u.uid, { department: e.target.value })}
                       >
                         {orgUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                        <option value="미지정">미지정</option>
                       </select>
-                      <div className={`text-[9px] font-black mt-2 uppercase tracking-tighter ${u.role === 'admin' ? 'text-blue-600' : 'text-slate-400'}`}>
-                        {u.role === 'admin' ? 'Administrator' : 'General Staff'}
+                      <div className="mt-2 flex items-center gap-1">
+                        <select 
+                          className={`text-[9px] font-black px-2 py-1 rounded-lg border-none outline-none focus:ring-1 focus:ring-indigo-200 transition-all cursor-pointer uppercase ${
+                            u.role === 'admin' ? 'bg-indigo-600 text-white' : 
+                            u.role === 'manager' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'
+                          }`}
+                          value={u.role}
+                          onChange={(e) => updateUser(u.uid, { role: e.target.value })}
+                        >
+                          <option value="staff">General Staff</option>
+                          <option value="manager">Team Manager</option>
+                          <option value="admin">Administrator</option>
+                        </select>
                       </div>
                     </td>
                     <td className="px-8 py-6 text-center">
