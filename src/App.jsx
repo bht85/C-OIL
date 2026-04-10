@@ -637,8 +637,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     waypoints: [
-      { id: 'start', label: '출발지', address: '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780, parkingFee: 0 },
-      { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0 }
+      { id: 'start', label: '출발지', address: '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780, parkingFee: 0, parkingNote: '' },
+      { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
     ],
     purpose: '',
     fuelType: profile?.fuelType || 'gasoline',
@@ -809,6 +809,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
       alias: '',
       purpose: '',
       parkingFee: 0,
+      parkingNote: '',
       lat: 37.5, 
       lng: 127.0 
     });
@@ -837,7 +838,13 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
       parkingTotal: formData.waypoints.reduce((acc, wp) => acc + (Number(wp.parkingFee) || 0), 0),
       fuelAmount: calculatedAmount - formData.waypoints.reduce((acc, wp) => acc + (Number(wp.parkingFee) || 0), 0),
       routeSummary: formData.waypoints
-        .map(w => `[${w.alias}${w.purpose ? ` (${w.purpose})` : ''}${w.parkingFee > 0 ? ` [🅿️${w.parkingFee.toLocaleString()}]` : ''}] ${w.address}`)
+        .map(w => {
+          let base = `[${w.alias}${w.purpose ? ` (${w.purpose})` : ''}`;
+          if (w.parkingFee > 0) {
+            base += ` [🅿️${w.parkingFee.toLocaleString()}${w.parkingNote ? `: ${w.parkingNote}` : ''}]`;
+          }
+          return base + `] ${w.address}`;
+        })
         .join(' → ')
     };
     
@@ -845,8 +852,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
     setFormData(prev => ({ 
       ...prev, 
       waypoints: [
-        { id: 'start', label: '출발지', address: '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780, parkingFee: 0 },
-        { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0 }
+        { id: 'start', label: '출발지', address: '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780, parkingFee: 0, parkingNote: '' },
+        { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
       ], 
       purpose: '',
       distance: 0,
@@ -966,19 +973,34 @@ const LogEntryForm = ({ fuelRates, profile, onSave }) => {
                     )}
                   </div>
 
-                  <div className="w-24 relative">
-                    <input 
-                      type="number" 
-                      placeholder="주차비" 
-                      className="w-full pl-3 pr-6 py-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-xs text-indigo-600 focus:bg-indigo-50/50 transition-all text-right appearance-none"
-                      value={wp.parkingFee || ''}
-                      onChange={(e) => {
-                        const newWaypoints = [...formData.waypoints];
-                        newWaypoints[idx].parkingFee = parseInt(e.target.value) || 0;
-                        setFormData({ ...formData, waypoints: newWaypoints });
-                      }}
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-300">원</span>
+                  <div className="w-24 space-y-2">
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        placeholder="주차비" 
+                        className="w-full pl-3 pr-6 py-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-xs text-indigo-600 focus:bg-indigo-50/50 transition-all text-right appearance-none"
+                        value={wp.parkingFee || ''}
+                        onChange={(e) => {
+                          const newWaypoints = [...formData.waypoints];
+                          newWaypoints[idx].parkingFee = parseInt(e.target.value) || 0;
+                          setFormData({ ...formData, waypoints: newWaypoints });
+                        }}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-300">원</span>
+                    </div>
+                    {wp.parkingFee > 0 && (
+                      <input 
+                        type="text"
+                        placeholder="주차 사유/장소"
+                        className="w-full px-2 py-2 rounded-lg bg-indigo-50/50 border border-indigo-100/50 outline-none font-bold text-[9px] text-indigo-700 animate-fade-in"
+                        value={wp.parkingNote || ''}
+                        onChange={(e) => {
+                          const newWaypoints = [...formData.waypoints];
+                          newWaypoints[idx].parkingNote = e.target.value;
+                          setFormData({ ...formData, waypoints: newWaypoints });
+                        }}
+                      />
+                    )}
                   </div>
 
                   {idx > 0 && idx < formData.waypoints.length - 1 ? (
