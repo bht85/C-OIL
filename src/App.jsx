@@ -1380,7 +1380,7 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit }) 
                       )}
                       {isPending && (
                         <div className="mt-2 text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md inline-block">
-                           관리자 보정 승인 대기 중 ({log.requestType === 'delete' ? '삭제' : '수정'} 요청)
+                           관리자 보정 승인 대기 중 ({request.requestType === 'delete' ? '삭제' : '수정'} 요청)
                         </div>
                       )}
                     </td>
