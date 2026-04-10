@@ -753,9 +753,6 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
           }
           return null;
         }).filter(Boolean) : null) || [
-          }
-          return null;
-        }).filter(Boolean) : null) || [
           { id: 'start', label: '출발지', address: initialData.departure || '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780, parkingFee: 0, parkingNote: '' },
           { id: 'end', label: '도착지', address: initialData.destination || '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
         ],
