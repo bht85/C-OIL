@@ -503,6 +503,8 @@ const Dashboard = ({ logs }) => {
   const stats = useMemo(() => {
     const totalDist = filteredLogs.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
     const totalAmount = filteredLogs.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+    const totalParking = filteredLogs.reduce((acc, curr) => acc + (Number(curr.parkingTotal) || 0), 0);
+    const totalFuel = totalAmount - totalParking;
     
     // 일자별 km 트래킹 데이터 생성
     const [year, month] = selectedMonth.split('-').map(Number);
@@ -524,7 +526,7 @@ const Dashboard = ({ logs }) => {
       };
     });
 
-    return { totalDist, totalAmount, count: filteredLogs.length, dailyData };
+    return { totalDist, totalAmount, totalParking, totalFuel, count: filteredLogs.length, dailyData };
   }, [filteredLogs, selectedMonth]);
 
   return (
@@ -545,10 +547,11 @@ const Dashboard = ({ logs }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-slide-up">
-        <StatCard title="총 정산 금액" value={`${stats.totalAmount.toLocaleString()}원`} subtitle="당월 지급 예정 합계" icon={<Calculator />} color="indigo" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-slide-up">
+        <StatCard title="총 정산 금액" value={`${stats.totalAmount.toLocaleString()}원`} subtitle={`유류 ${stats.totalFuel.toLocaleString()} + 주차 ${stats.totalParking.toLocaleString()}`} icon={<Calculator />} color="indigo" />
         <StatCard title="총 누적 거리" value={`${stats.totalDist.toFixed(1)}km`} subtitle="업무용 운행 전체 거리" icon={<Navigation />} color="emerald" />
-        <StatCard title="정산 건수" value={`${stats.count}건`} subtitle="정상 승인된 내역 개수" icon={<History />} color="amber" />
+        <StatCard title="순수 유류비" value={`${stats.totalFuel.toLocaleString()}원`} subtitle="KM 단가 기준 합산액" icon={<Fuel />} color="blue" />
+        <StatCard title="총 주차 비용" value={`${stats.totalParking.toLocaleString()}원`} subtitle="발생 주차비 전체 합계" icon={<PlusCircle />} color="amber" />
       </div>
 
       <div className="grid grid-cols-1 gap-8">
@@ -2052,7 +2055,9 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange }) =
   const stats = useMemo(() => {
     const totalDist = filteredLogs.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
     const totalAmount = filteredLogs.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-    return { totalDist, totalAmount, count: filteredLogs.length };
+    const totalParking = filteredLogs.reduce((acc, curr) => acc + (Number(curr.parkingTotal) || 0), 0);
+    const totalFuel = totalAmount - totalParking;
+    return { totalDist, totalAmount, totalParking, totalFuel, count: filteredLogs.length };
   }, [filteredLogs]);
 
   return (
@@ -2124,8 +2129,9 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange }) =
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <StatCard title="검색 결과 합계" value={`${stats.totalAmount.toLocaleString()}원`} subtitle="선택된 조건의 총 정산액" icon={<Calculator />} color="indigo" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <StatCard title="합계 (유류+주차)" value={`${stats.totalAmount.toLocaleString()}원`} subtitle={`유류비: ${stats.totalFuel.toLocaleString()}원`} icon={<Calculator />} color="indigo" />
+        <StatCard title="총 실 주차비" value={`${stats.totalParking.toLocaleString()}원`} subtitle="발생한 모든 주차 비용" icon={<PlusCircle />} color="amber" />
         <StatCard title="검색 누적 거리" value={`${stats.totalDist.toFixed(1)}km`} subtitle="선택된 조건의 총 운행거리" icon={<Navigation />} color="emerald" />
       </div>
 
