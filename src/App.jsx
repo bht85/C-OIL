@@ -718,16 +718,37 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
         ...initialData,
         date: initialData.date || new Date().toISOString().split('T')[0],
         waypoints: initialData.waypoints || (initialData.routeSummary ? initialData.routeSummary.split(' → ').map((segment, idx) => {
-          const match = segment.match(/^\[(.*?)(?:\s\((.*?)\))?(?:\s\[P\s([\d,]+)\])?\]\s(.*)$/);
-          if (match) {
+          // 단계적 파싱: [정보] 주소 형태 분리
+          const outerMatch = segment.match(/^\[(.*)\]\s(.*)$/);
+          if (outerMatch) {
+            let infoPart = outerMatch[1];
+            const address = outerMatch[2];
+            let alias = infoPart;
+            let purpose = "";
+            let parkingFee = 0;
+
+            // 주차비 [P 50,000] 추출
+            const pMatch = infoPart.match(/\[P\s([\d,]+)\]/);
+            if (pMatch) {
+              parkingFee = Number(pMatch[1].replace(/,/g, ''));
+              alias = alias.replace(/\s?\[P\s[\d,]+\]/, "").trim();
+            }
+
+            // 방문 목적 (목적) 추출 - 맨 뒤의 괄호 탐색
+            const purpMatch = alias.match(/\s\(([^)]+)\)$/);
+            if (purpMatch) {
+              purpose = purpMatch[1];
+              alias = alias.replace(/\s?\([^)]+\)$/, "").trim();
+            }
+
             return {
               id: idx === 0 ? 'start' : idx === initialData.routeSummary.split(' → ').length - 1 ? 'end' : `mid_${idx}`,
               label: idx === 0 ? '출발지' : idx === initialData.routeSummary.split(' → ').length - 1 ? '도착지' : '경유지',
-              alias: match[1] || '',
-              purpose: match[2] || '',
-              parkingFee: match[3] ? Number(match[3].replace(/,/g, '')) : 0,
-              address: match[4] || '',
-              lat: 37.5665, lng: 126.9780 // 기본값
+              alias: alias,
+              purpose: purpose,
+              parkingFee: parkingFee,
+              address: address,
+              lat: 37.5665, lng: 126.9780 // 기본값, 추후 지오코딩 필요
             };
           }
           return null;
@@ -735,7 +756,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData }) => {
           { id: 'start', label: '출발지', address: initialData.departure || '', alias: '', purpose: '', lat: 37.5665, lng: 126.9780, parkingFee: 0, parkingNote: '' },
           { id: 'end', label: '도착지', address: initialData.destination || '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
         ],
-        isManualDistance: initialData.isManualDistance || false
+        distance: initialData.distance || 0,
+        isManualDistance: initialData.isManualDistance || (initialData.distance > 0 ? true : false) // 기존 거리가 있다면 수동 모드로 우선 보존
       });
     } else if (profile?.fuelType) {
       setFormData(prev => ({ ...prev, fuelType: profile.fuelType }));
