@@ -1809,8 +1809,7 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit }) 
           )}
         </div>
       </div>
-    </div>
-  </>
+    </>
   );
 };
 
@@ -1882,10 +1881,6 @@ const ActionButtons = ({ log, locked, isPending, isApproved, isAdmin, onEdit, on
         {isMobile && "삭제"}
       </button>
     </div>
-  );
-};
-    </div>
-  </>
   );
 };
 
