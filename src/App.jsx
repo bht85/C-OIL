@@ -1123,9 +1123,9 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
   };
 
   return (
-    <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100">
+    <div className="bg-white p-5 sm:p-10 rounded-3xl sm:rounded-[2.5rem] shadow-sm border border-slate-100">
       <form onSubmit={handleSubmit} className="space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10">
           <InputGroup label="운행 날짜" icon={<History size={16}/>}>
             <input 
               type="date" 
@@ -1147,14 +1147,14 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
 
           <InputGroup label="사용 유종" icon={<Fuel size={16}/>}>
             <div className="relative group">
-              <div className="w-full px-5 py-4.5 rounded-2xl bg-slate-100/50 border border-slate-200 font-bold text-slate-600 flex items-center justify-between shadow-inner">
-                <span className="flex items-center gap-2">
+              <div className="w-full px-5 py-4 rounded-2xl bg-slate-100/50 border border-slate-200 font-bold text-slate-600 flex flex-wrap items-center justify-between shadow-inner gap-2">
+                <span className="flex items-center gap-2 text-sm sm:text-base">
                   <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
-                  {formData.fuelType === 'gasoline' ? '휘발유 (Premium)' : formData.fuelType === 'diesel' ? '경유 (Diesel)' : '액화석유가스 (LPG)'} 
-                  <span className="text-indigo-500 ml-1">({Number(fuelRates?.[formData.fuelType]?.unitPrice || 0).toFixed(1)}원/km)</span>
+                  {formData.fuelType === 'gasoline' ? '휘발유' : formData.fuelType === 'diesel' ? '경유' : 'LPG'} 
+                  <span className="text-indigo-500 ml-1 text-xs sm:text-sm">({Number(fuelRates?.[formData.fuelType]?.unitPrice || 0).toFixed(1)}원/km)</span>
                 </span>
               </div>
-              <p className="mt-2.5 px-1 text-[10px] font-black text-slate-400 italic">
+              <p className="mt-2.5 px-1 text-[9px] sm:text-[10px] font-black text-slate-400 italic">
                 ※ 유종 변경은 <span className="text-indigo-500 underline underline-offset-2">'내 정보'</span> 메뉴에서 가능합니다.
               </p>
             </div>
@@ -1183,7 +1183,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
                     <button 
                       type="button" 
                       onClick={() => handleQuickSelect(idx, { name: profile.homeAlias || '우리집', address: profile.homeAddress, lat: profile.homeLat, lng: profile.homeLng })}
-                      className="group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-600 text-white text-[10px] font-black shadow-lg shadow-indigo-100/50 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all"
+                      className="group/btn flex items-center gap-1.5 px-4 py-2 rounded-full bg-indigo-600 text-white text-[11px] font-black shadow-lg shadow-indigo-100/50 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all"
                     >
                       <span className="opacity-80">🏠</span>
                       <span>{profile.homeAlias || '우리집'}</span>
@@ -1193,66 +1193,67 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
                     <button 
                       type="button" 
                       onClick={() => setFavSelectorIdx(idx)}
-                      className="group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-100 text-slate-500 text-[10px] font-black hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all border-dashed"
+                      className="group/btn flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-50 border border-slate-100 text-slate-500 text-[11px] font-black hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all border-dashed"
                     >
                       <Star size={12} className={favSelectorIdx === idx ? 'fill-indigo-500 text-indigo-500' : ''} />
                       <span>즐겨찾기 선택</span>
                     </button>
                   )}
                 </div>
-                <div className="flex gap-3 items-center">
-                  <div className="flex-[2] relative">
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-slate-50/50 p-4 sm:p-0 rounded-2xl sm:bg-transparent">
+                  <div className="w-full sm:flex-[2] relative">
                     <input 
                       type="text" 
                       placeholder={`${wp.label} 주소 검색`} 
                       readOnly
                       onClick={() => openSearch(idx)}
-                      className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 group-hover:border-indigo-200 cursor-pointer focus:bg-white focus:ring-4 focus:ring-indigo-50/50 outline-none transition-all font-bold text-slate-700 truncate"
+                      className="w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-white sm:bg-slate-50 border border-slate-100 group-hover:border-indigo-200 cursor-pointer focus:bg-white focus:ring-4 focus:ring-indigo-50/50 outline-none transition-all font-bold text-slate-700 truncate"
                       value={wp.address}
                     />
                     {!wp.address && (
-                      <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-500 pointer-events-none opacity-60">검색</span>
+                      <span className="absolute right-4 sm:right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-500 border border-indigo-100 px-2 py-1 rounded-lg pointer-events-none opacity-60">검색</span>
                     )}
                   </div>
-                  <div className="flex-1 relative">
+
+                  <div className="w-full sm:flex-1 relative">
                     <input 
                       type="text" 
                       placeholder="명칭 (필수)" 
-                      className={`w-full px-5 py-4 rounded-2xl bg-slate-50 border-2 outline-none transition-all font-bold text-sm ${
+                      className={`w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-white sm:bg-slate-50 border-2 outline-none transition-all font-bold text-sm ${
                         wp.alias ? 'border-transparent text-slate-600 focus:border-indigo-400 focus:bg-white' : 'border-red-50 text-red-500 focus:border-red-200'
                       } truncate`}
                       value={wp.alias}
                       onChange={(e) => handleAliasChange(idx, e.target.value)}
                     />
                     {!wp.alias && (
-                      <span className="absolute -top-6 right-1 text-[9px] font-black text-red-500 animate-pulse">필수</span>
+                      <span className="absolute -top-5 right-1 text-[9px] font-black text-red-500 animate-pulse">필수</span>
                     )}
                   </div>
 
-                  <div className="flex-1 relative">
+                  <div className="w-full sm:flex-1 relative">
                     <input 
                       type="text" 
                       placeholder="방문 목적 (필수)" 
                       readOnly={idx === 0}
-                      className={`w-full px-4 py-4 rounded-2xl outline-none transition-all font-bold text-sm truncate ${
+                      className={`w-full px-4 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl outline-none transition-all font-bold text-sm truncate ${
                         idx === 0 
                         ? 'bg-slate-100/50 text-slate-400 border-transparent cursor-not-allowed'
-                        : (wp.purpose ? 'bg-slate-50 border-transparent text-slate-600 focus:border-indigo-400 focus:bg-white' : 'bg-slate-50 border-red-50 text-red-500 focus:border-red-200')
+                        : (wp.purpose ? 'bg-white sm:bg-slate-50 border-transparent text-slate-600 focus:border-indigo-400 focus:bg-white' : 'bg-white sm:bg-slate-50 border-red-50 text-red-500 focus:border-red-200')
                       }`}
                       value={wp.purpose}
                       onChange={(e) => handleStopPurposeChange(idx, e.target.value)}
                     />
                     {!wp.purpose && (
-                      <span className="absolute -top-6 right-1 text-[9px] font-black text-red-500 animate-pulse">필수</span>
+                      <span className="absolute -top-5 right-1 text-[9px] font-black text-red-500 animate-pulse">필수</span>
                     )}
                   </div>
 
-                  <div className="w-24 space-y-2">
-                    <div className="relative">
+                  <div className="flex w-full sm:w-auto items-center gap-3">
+                    <div className="flex-1 sm:w-24 relative">
                       <input 
                         type="number" 
                         placeholder="주차비" 
-                        className="w-full pl-3 pr-6 py-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-xs text-indigo-600 focus:bg-indigo-50/50 transition-all text-right appearance-none"
+                        className="w-full pl-3 pr-8 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-white sm:bg-slate-50 border-none outline-none font-bold text-sm sm:text-xs text-indigo-600 focus:bg-indigo-50/50 transition-all text-right appearance-none"
                         value={wp.parkingFee || ''}
                         onChange={(e) => {
                           const newWaypoints = [...formData.waypoints];
@@ -1262,11 +1263,26 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-300">원</span>
                     </div>
-                    {wp.parkingFee > 0 && (
+
+                    {idx > 0 && idx < formData.waypoints.length - 1 ? (
+                      <button 
+                        type="button" 
+                        onClick={() => removeStop(idx)}
+                        className="p-3 bg-red-50 text-red-400 hover:text-red-600 sm:bg-transparent sm:text-slate-300 transition-all active:scale-90 rounded-xl"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    ) : (
+                      <div className="w-10 sm:w-8"></div>
+                    )}
+                  </div>
+                  
+                  {wp.parkingFee > 0 && (
+                    <div className="w-full animate-fade-in sm:mt-1">
                       <input 
                         type="text"
-                        placeholder="주차 사유/장소"
-                        className="w-full px-2 py-2 rounded-lg bg-indigo-50/50 border border-indigo-100/50 outline-none font-bold text-[9px] text-indigo-700 animate-fade-in"
+                        placeholder="주차 사유/장소 (예: 유료주차장, 발렛 등)"
+                        className="w-full px-4 py-3 rounded-xl bg-indigo-50/30 border border-indigo-100/50 outline-none font-bold text-xs text-indigo-700"
                         value={wp.parkingNote || ''}
                         onChange={(e) => {
                           const newWaypoints = [...formData.waypoints];
@@ -1274,19 +1290,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
                           setFormData({ ...formData, waypoints: newWaypoints });
                         }}
                       />
-                    )}
-                  </div>
-
-                  {idx > 0 && idx < formData.waypoints.length - 1 ? (
-                    <button 
-                      type="button" 
-                      onClick={() => removeStop(idx)}
-                      className="p-2 text-slate-300 hover:text-red-500 transition-all active:scale-90"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  ) : (
-                    <div className="w-8"></div>
+                    </div>
                   )}
                 </div>
               </div>
@@ -1306,49 +1310,53 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
           </InputGroup>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 premium-card p-8 rounded-[2.5rem]">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 premium-card p-5 sm:p-8 rounded-3xl sm:rounded-[2.5rem]">
           <div className="flex flex-col justify-center">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-3 sm:mb-2">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Total Distance</p>
               <button 
                 type="button"
                 onClick={() => setFormData(prev => ({ ...prev, isManualDistance: !prev.isManualDistance }))}
-                className={`text-[10px] font-black px-3 py-1.5 rounded-xl transition-all ${
+                className={`text-[9px] sm:text-[10px] font-black px-3 py-2 rounded-xl transition-all ${
                   formData.isManualDistance ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-100 text-slate-400 border border-slate-100'
                 }`}
               >
-                {formData.isManualDistance ? '수동 보정 활성' : '수동 입력 전환'}
+                {formData.isManualDistance ? '수동 보정 활성中' : '수동 입력 전환'}
               </button>
             </div>
             <div className="flex items-baseline gap-1">
               {formData.isManualDistance ? (
-                <div className="flex items-baseline gap-2">
+                <div className="flex items-baseline gap-2 w-full">
                   <input 
                     type="number"
                     step="0.1"
-                    className="w-24 text-3xl font-black text-indigo-600 bg-transparent border-b-4 border-indigo-400 outline-none px-1"
+                    className="w-full max-w-[120px] text-3xl sm:text-4xl font-black text-indigo-600 bg-transparent border-b-4 border-indigo-400 outline-none px-1"
                     value={formData.distance}
                     onChange={(e) => setFormData(prev => ({ ...prev, distance: parseFloat(e.target.value) || 0 }))}
                   />
-                  <span className="text-base font-black text-slate-400">km</span>
+                  <span className="text-xl font-black text-slate-400">km</span>
                 </div>
               ) : (
-                <div className="text-4xl font-black text-slate-900 flex items-baseline gap-1 tracking-tight">
-                  {formData.distance} <span className="text-lg text-slate-400">km</span>
+                <div className="text-4xl sm:text-5xl font-black text-slate-900 flex items-baseline gap-1 tracking-tight">
+                  {formData.distance} <span className="text-xl text-slate-400">km</span>
                 </div>
               )}
             </div>
-            <p className="text-[11px] font-medium text-slate-400 mt-2 px-1">
-              {formData.isManualDistance ? '실제 계기판 거리를 직접 입력하세요.' : '시스템 자동 산출 직선 거리 (도로 보정 1.25x 적용)'}
+            <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 mt-3 px-1">
+              {formData.isManualDistance ? '실제 계기판 거리를 직접 입력하세요.' : '시스템 자동 산출 직선 거리 (1.25배 보정)'}
             </p>
           </div>
-          <div className="p-8 rounded-3xl bg-premium-gradient shadow-2xl shadow-indigo-200 text-white flex justify-between items-center transition-all duration-500 hover:scale-[1.02]">
+          <div className="p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-premium-gradient shadow-2xl shadow-indigo-200 text-white flex justify-between items-center transition-all duration-500 hover:scale-[1.02]">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-1">Expected Amount</p>
-              <h4 className="text-3xl font-black">{calculatedAmount.toLocaleString()}<span className="text-base ml-1.5 opacity-60">원</span></h4>
+              <h4 className="text-3xl sm:text-4xl font-black">{calculatedAmount.toLocaleString()}<span className="text-base sm:text-lg ml-1.5 opacity-60">원</span></h4>
+              <p className="text-[10px] sm:text-[11px] font-black opacity-50 mt-1">
+                유류 {(Math.round(formData.distance * Number(fuelRates?.[formData.fuelType]?.unitPrice || 0))).toLocaleString()} + 
+                주차 {formData.waypoints.reduce((acc, wp) => acc + (Number(wp.parkingFee) || 0), 0).toLocaleString()}
+              </p>
             </div>
-            <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 self-center">
-              <Calculator size={28} className="opacity-90" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/20 backdrop-blur-md rounded-xl sm:rounded-2xl flex items-center justify-center border border-white/30 self-center">
+              <Calculator size={24} className="opacity-90" />
             </div>
           </div>
         </div>
@@ -1356,14 +1364,14 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
         <button 
           type="submit" 
           disabled={!isFormValid}
-          className={`w-full py-6 rounded-2xl font-black text-lg transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-[0.98] ${
+          className={`w-full py-4 sm:py-6 rounded-2xl font-black text-base sm:text-lg transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-[0.98] ${
             isFormValid 
             ? 'bg-slate-900 text-white shadow-indigo-100 hover:bg-black' 
             : 'bg-slate-100 text-slate-300 cursor-not-allowed'
           }`}
         >
           <PlusCircle size={22} /> 
-          {formData.distance > 0 ? '전체 정산 데이터 기록 완료하기' : '주소와 장소명을 입력해 주세요'}
+          {formData.distance > 0 ? '기록 완료하기' : '상세 정보를 입력해 주세요'}
         </button>
       </form>
 
@@ -1615,17 +1623,17 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit }) 
         </div>
       )}
 
-      <div className="premium-card rounded-[2.5rem] overflow-hidden animate-fade-in relative">
-
-        <div className="overflow-x-auto">
+      <div className="premium-card rounded-2xl sm:rounded-[2.5rem] overflow-hidden animate-fade-in relative">
+        {/* Table View (Desktop) */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left table-fixed">
             <thead className="bg-slate-50/50 border-b border-slate-100">
               <tr>
-                <th className="w-[180px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">운행 정보</th>
-                <th className="px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">운행 경로 및 목적</th>
-                <th className="w-[180px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-right whitespace-nowrap">구간 및 유종</th>
-                <th className="w-[180px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-right whitespace-nowrap">정산 금액</th>
-                <th className="w-[120px] px-4 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-center whitespace-nowrap">작업</th>
+                <th className="w-[180px] px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">운행 정보</th>
+                <th className="px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">운행 경로 및 목적</th>
+                <th className="w-[180px] px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-right whitespace-nowrap">구간 및 유종</th>
+                <th className="w-[180px] px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-right whitespace-nowrap">정산 금액</th>
+                <th className="w-[120px] px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-center whitespace-nowrap">작업</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -1642,154 +1650,240 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit }) 
                 </tr>
               ) : (
                 filteredLogs.map((log) => {
-                const locked = isLogLocked(log);
-                const isPending = log.requestStatus === 'pending';
-                const isApproved = log.requestStatus === 'approved';
-                return (
-                  <tr key={log.id} className="group hover:bg-slate-50/50 transition-all border-b border-slate-50 last:border-0 relative">
-                    <td className="px-8 py-7">
-                      <div className="flex items-center gap-2">
-                        <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.date}</div>
-                        {locked && (
-                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tight shrink-0">
-                            <Lock size={8} />
-                            마감
-                          </span>
-                        )}
-                        {isApproved && (
-                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tight shrink-0 animate-pulse border border-emerald-100">
-                            <CheckCircle size={8} />
-                            보정 승인됨
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] font-bold text-slate-400 flex items-center gap-2 mt-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
-                        {log.userName}
-                      </div>
-                    </td>
-                    <td className="px-8 py-7">
-                      <div className="text-[13px] font-bold text-slate-700 flex flex-wrap items-center gap-1.5 leading-relaxed max-w-xl">
-                        {log.routeSummary ? (
-                          log.routeSummary.split(' → ').map((stop, sIdx, arr) => (
-                            <React.Fragment key={sIdx}>
-                              <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500 whitespace-nowrap">{stop}</span>
-                              {sIdx < arr.length - 1 && <ChevronRight size={10} className="text-slate-300 shrink-0 mx-0.5" />}
-                            </React.Fragment>
-                          ))
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500">{log.departure}</span>
-                            <ChevronRight size={12} className="text-slate-300" /> 
-                            <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500">{log.destination}</span>
-                          </div>
-                        )}
-                      </div>
-                      {log.purpose && (
-                        <div className="text-[10px] font-black text-indigo-500 mt-2.5 bg-indigo-50/50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5">
-                          <FileText size={10} />
-                          {log.purpose}
+                  const locked = isLogLocked(log);
+                  const isPending = log.requestStatus === 'pending';
+                  const isApproved = log.requestStatus === 'approved';
+                  return (
+                    <tr key={log.id} className="group hover:bg-slate-50/50 transition-all border-b border-slate-50 last:border-0 relative">
+                      <td className="px-8 py-7">
+                        <div className="flex items-center gap-2">
+                          <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.date}</div>
+                          {locked && (
+                            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tight shrink-0">
+                              <Lock size={8} />
+                              마감
+                            </span>
+                          )}
+                          {isApproved && (
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tight shrink-0 animate-pulse border border-emerald-100">
+                              <CheckCircle size={8} />
+                              보정 승인됨
+                            </span>
+                          )}
                         </div>
-                      )}
-                      {isPending && (
-                        <div className="mt-2 text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md inline-block">
-                           관리자 보정 승인 대기 중 ({log.requestType === 'delete' ? '삭제' : '수정'} 요청)
+                        <div className="text-[11px] font-bold text-slate-400 flex items-center gap-2 mt-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
+                          {log.userName}
                         </div>
-                      )}
-                    </td>
-                    <td className="px-8 py-7 text-right">
-                      <div className="flex items-center justify-end gap-3">
-                        <div className="font-black text-slate-900 text-sm whitespace-nowrap">{log.distance} <span className="text-[10px] font-bold text-slate-400">km</span></div>
-                        <div className={`text-[9px] px-2 py-1 rounded-lg font-black inline-block uppercase tracking-tight shrink-0 ${
-                          log.fuelType === 'gasoline' ? 'bg-indigo-50 text-indigo-600' : 
-                          log.fuelType === 'diesel' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
-                        }`}>
-                          {log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG'}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-8 py-7 text-right">
-                      <div className="font-black text-indigo-600 text-[17px] whitespace-nowrap tracking-tight">{Number(log.amount || 0).toLocaleString()} <span className="text-[11px] font-bold opacity-60">원</span></div>
-                      {log.parkingTotal > 0 && (
-                        <div className="text-[9px] font-bold text-slate-400 mt-1">
-                          (유류 {Number(log.fuelAmount || 0).toLocaleString()} + 주차 {Number(log.parkingTotal).toLocaleString()})
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-8 py-7 text-center">
-                      {(locked || isPending || isApproved) && !isAdmin ? (
-                        <div className="flex flex-col gap-1 items-center">
-                          {isPending ? (
-                            <div className="p-3 text-blue-300 animate-pulse"><History size={18} /></div>
-                          ) : isApproved ? (
-                            <div className="flex flex-col items-center gap-2">
-                              <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-md">수정 권한 활성</span>
-                              <div className="flex gap-1 animate-bounce">
-                              <button 
-                                onClick={() => onEdit(log)}
-                                className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
-                                title="승인됨: 수정하기"
-                              >
-                                <Settings size={18} />
-                              </button>
-                              <button 
-                                onClick={() => onDelete(log.id)}
-                                className="p-3 bg-red-50 text-red-600 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-sm"
-                                title="승인됨: 삭제하기"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                            <div className="flex gap-1">
-                              <button 
-                                onClick={() => setRequestModal({ show: true, logId: log.id, type: 'edit' })}
-                                className="p-2 text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
-                                title="수정 요청"
-                              >
-                                <Settings size={16} />
-                              </button>
-                              <button 
-                                onClick={() => setRequestModal({ show: true, logId: log.id, type: 'delete' })}
-                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                title="삭제 요청"
-                              >
-                                <Trash2 size={16} />
-                              </button>
+                      </td>
+                      <td className="px-8 py-7">
+                        <div className="text-[13px] font-bold text-slate-700 flex flex-wrap items-center gap-1.5 leading-relaxed max-w-xl">
+                          {log.routeSummary ? (
+                            log.routeSummary.split(' → ').map((stop, sIdx, arr) => (
+                              <React.Fragment key={sIdx}>
+                                <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500 whitespace-nowrap">{stop}</span>
+                                {sIdx < arr.length - 1 && <ChevronRight size={10} className="text-slate-300 shrink-0 mx-0.5" />}
+                              </React.Fragment>
+                            ))
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500">{log.departure}</span>
+                              <ChevronRight size={12} className="text-slate-300" /> 
+                              <span className="bg-slate-50 px-2 py-0.5 rounded text-[11px] font-black text-slate-500">{log.destination}</span>
                             </div>
                           )}
                         </div>
+                        {log.purpose && (
+                          <div className="text-[10px] font-black text-indigo-500 mt-2.5 bg-indigo-50/50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5">
+                            <FileText size={10} />
+                            {log.purpose}
+                          </div>
+                        )}
+                        {isPending && (
+                          <div className="mt-2 text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md inline-block">
+                             관리자 보정 승인 대기 중 ({log.requestType === 'delete' ? '삭제' : '수정'} 요청)
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-8 py-7 text-right">
+                        <div className="flex items-center justify-end gap-3 font-black text-slate-900 text-sm whitespace-nowrap">
+                          {log.distance} <span className="text-[10px] font-bold text-slate-400">km</span>
+                          <div className={`text-[9px] px-2 py-1 rounded-lg font-black inline-block uppercase tracking-tight shrink-0 ${
+                            log.fuelType === 'gasoline' ? 'bg-indigo-50 text-indigo-600' : 
+                            log.fuelType === 'diesel' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                          }`}>
+                            {log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG'}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-8 py-7 text-right">
+                        <div className="font-black text-indigo-600 text-[17px] whitespace-nowrap tracking-tight">{Number(log.amount || 0).toLocaleString()} <span className="text-[11px] font-bold opacity-60">원</span></div>
+                        {log.parkingTotal > 0 && (
+                          <div className="text-[9px] font-bold text-slate-400 mt-1">
+                            (유류 {Number(log.fuelAmount || 0).toLocaleString()} + 주차 {Number(log.parkingTotal).toLocaleString()})
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-8 py-7 text-center">
+                        <ActionButtons log={log} locked={locked} isPending={isPending} isApproved={isApproved} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} setRequestModal={setRequestModal} />
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile View (Cards) */}
+        <div className="sm:hidden divide-y divide-slate-100">
+          {filteredLogs.length === 0 ? (
+            <div className="px-6 py-20 text-center">
+               <History size={32} className="mx-auto text-slate-200 mb-4" />
+               <p className="text-slate-400 font-bold">운행 내역이 없습니다.</p>
+            </div>
+          ) : (
+            filteredLogs.map((log) => {
+              const locked = isLogLocked(log);
+              const isPending = log.requestStatus === 'pending';
+              const isApproved = log.requestStatus === 'approved';
+              return (
+                <div key={log.id} className="p-5 flex flex-col gap-4 bg-white hover:bg-slate-50/50 transition-all">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-slate-900 text-sm">{log.date}</span>
+                        {locked && <span className="bg-amber-50 text-amber-500 text-[8px] font-black px-1.5 py-0.5 rounded-md">마감</span>}
+                        {isApproved && <span className="bg-emerald-50 text-emerald-600 text-[8px] font-black px-1.5 py-0.5 rounded-md animate-pulse">보정 승인</span>}
+                      </div>
+                      <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                        {log.userName}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-black text-indigo-600 text-lg">
+                        {Number(log.amount || 0).toLocaleString()}<span className="text-[10px] ml-0.5 opacity-60">원</span>
+                      </div>
+                      <div className="text-[9px] font-bold text-slate-400 shrink-0">
+                        {log.distance}km · {log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50/50 p-4 rounded-xl space-y-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {log.routeSummary ? (
+                        log.routeSummary.split(' → ').map((stop, sIdx, arr) => (
+                          <React.Fragment key={sIdx}>
+                            <span className="text-[11px] font-bold text-slate-600">{stop}</span>
+                            {sIdx < arr.length - 1 && <ChevronRight size={10} className="text-slate-300" />}
+                          </React.Fragment>
+                        ))
                       ) : (
-                        <div className="flex justify-center gap-1">
-                          <button 
-                            onClick={() => onEdit(log)}
-                            className="p-3 text-slate-200 hover:text-indigo-500 hover:bg-indigo-50 rounded-2xl transition-all active:scale-90"
-                            title="수정"
-                          >
-                            <Settings size={18} />
-                          </button>
-                          <button 
-                            onClick={() => onDelete(log.id)}
-                            className={`p-3 rounded-2xl transition-all active:scale-90 ${
-                              locked && isAdmin
-                                ? 'text-red-300 hover:text-red-600 hover:bg-red-50 border border-dashed border-red-200'
-                                : 'text-slate-200 hover:text-red-500 hover:bg-red-50'
-                            }`}
-                            title={locked && isAdmin ? '관리자 강제 삭제' : '삭제'}
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-bold text-slate-600">{log.departure}</span>
+                          <ChevronRight size={10} className="text-slate-300" />
+                          <span className="text-[11px] font-bold text-slate-600">{log.destination}</span>
                         </div>
                       )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                    </div>
+                    {log.purpose && (
+                      <div className="text-[10px] font-black text-indigo-500 bg-white px-2 py-1 rounded-md inline-flex items-center gap-1.5 border border-indigo-50">
+                        <span className="opacity-50">#</span> {log.purpose}
+                      </div>
+                    )}
+                    {isPending && (
+                      <div className="text-[9px] font-black text-blue-600 block pt-1">
+                        보정 승인 대기 중 ({log.requestType === 'delete' ? '삭제' : '수정'})
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-2 border-t border-slate-50 pt-3">
+                    <ActionButtons log={log} locked={locked} isPending={isPending} isApproved={isApproved} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} setRequestModal={setRequestModal} isMobile />
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
+    </div>
+  </>
+  );
+};
+
+const ActionButtons = ({ log, locked, isPending, isApproved, isAdmin, onEdit, onDelete, setRequestModal, isMobile = false }) => {
+  const btnClass = isMobile ? "flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-black text-xs transition-all active:scale-95" : "p-2.5 rounded-2xl transition-all active:scale-90 flex items-center justify-center";
+  
+  if ((locked || isPending || isApproved) && !isAdmin) {
+    if (isPending) return <div className={`${isMobile ? 'w-full py-2 bg-blue-50/50 text-blue-400 rounded-xl text-center font-bold text-[10px]' : 'p-3 text-blue-300 animate-pulse'}`}><History size={isMobile ? 14 : 18} className="inline mr-1" /> 검토 중</div>;
+    
+    if (isApproved) return (
+      <div className={`flex gap-2 ${isMobile ? 'w-full' : ''}`}>
+        <button 
+          onClick={() => onEdit(log)}
+          className={`${btnClass} ${isMobile ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white shadow-sm'}`}
+          title="승인됨: 수정하기"
+        >
+          <Settings size={isMobile ? 14 : 18} />
+          {isMobile && "수정"}
+        </button>
+        <button 
+          onClick={() => onDelete(log.id)}
+          className={`${btnClass} ${isMobile ? 'bg-red-500 text-white' : 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white shadow-sm'}`}
+          title="승인됨: 삭제하기"
+        >
+          <Trash2 size={isMobile ? 14 : 18} />
+          {isMobile && "삭제"}
+        </button>
+      </div>
+    );
+
+    return (
+      <div className={`flex gap-2 ${isMobile ? 'w-full' : ''}`}>
+        <button 
+          onClick={() => setRequestModal({ show: true, logId: log.id, type: 'edit' })}
+          className={`${btnClass} ${isMobile ? 'bg-slate-100 text-slate-600' : 'text-slate-300 hover:text-indigo-500 hover:bg-indigo-50'}`}
+          title="수정 요청"
+        >
+          <Settings size={isMobile ? 14 : 16} />
+          {isMobile && "수정 요청"}
+        </button>
+        <button 
+          onClick={() => setRequestModal({ show: true, logId: log.id, type: 'delete' })}
+          className={`${btnClass} ${isMobile ? 'bg-slate-100 text-red-400' : 'text-slate-300 hover:text-red-500 hover:bg-red-50'}`}
+          title="삭제 요청"
+        >
+          <Trash2 size={isMobile ? 14 : 16} />
+          {isMobile && "삭제 요청"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex gap-2 ${isMobile ? 'w-full' : 'justify-center'}`}>
+      <button 
+        onClick={() => onEdit(log)}
+        className={`${btnClass} ${isMobile ? 'bg-indigo-50 text-indigo-600' : 'text-slate-200 hover:text-indigo-500 hover:bg-indigo-50'}`}
+        title="수정"
+      >
+        <Settings size={isMobile ? 14 : 18} />
+        {isMobile && "수정"}
+      </button>
+      <button 
+        onClick={() => onDelete(log.id)}
+        className={`${btnClass} ${isMobile ? 'bg-red-50 text-red-500' : (locked && isAdmin ? 'text-red-300 hover:text-red-600 hover:bg-red-50 border border-dashed border-red-200' : 'text-slate-200 hover:text-red-500 hover:bg-red-50')}`}
+        title={locked && isAdmin ? '관리자 강제 삭제' : '삭제'}
+      >
+        <Trash2 size={isMobile ? 14 : 18} />
+        {isMobile && "삭제"}
+      </button>
+    </div>
+  );
+};
     </div>
   </>
   );
