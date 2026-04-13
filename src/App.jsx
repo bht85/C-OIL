@@ -893,18 +893,20 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
     isManualDistance: initialData ? true : false // 수정 중일 때는 기존 거리를 보존하기 위해 수동 모드로 시작
   });
 
-  // 기존 데이터 로드 시 폼 데이터 초기화 로직 강화
+  // 기존 데이터 로드 시 폼 데이터 초기화 로직 강화 (waypoint가 부실할 경우 routeSummary를 우선 파싱)
   useEffect(() => {
     if (initialData) {
-      setFormData({
-        ...initialData,
-        date: initialData.date || new Date().toISOString().split('T')[0],
-        waypoints: initialData.waypoints || (initialData.routeSummary ? initialData.routeSummary.split(/\s[→>]\s/).map((segment, idx, allSegs) => {
-          // 더욱 유연한 정규식으로 주소와 정보부 분리
-          const outerMatch = segment.match(/^\[(.*)\]\s*(.*)$/);
+      // 데이터 안정성 검사: waypoints 배열이 있고 각 항목에 주소가 있는지 확인
+      const isWaypointsComplete = Array.isArray(initialData.waypoints) && 
+                                   initialData.waypoints.length >= 2 && 
+                                   initialData.waypoints.every(wp => wp.address && wp.address.trim().length > 0);
+
+      const parsedWaypoints = (initialData.routeSummary ? initialData.routeSummary.split(/\s*[→>▶]\s*|\s-\s/).map((segment, idx, allSegs) => {
+          // 더욱 유연한 정규식으로 주소와 정보부 분리 (비워져 있는 것 방지)
+          const outerMatch = segment.trim().match(/^\[(.*)\]\s*(.*)$/);
           if (outerMatch) {
             let infoPart = outerMatch[1];
-            let address = outerMatch[2];
+            let address = outerMatch[2] || "";
             let purpose = "";
             let parkingFee = 0;
             let parkingNote = "";
@@ -914,7 +916,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
             if (pMatch) {
               parkingFee = Number(pMatch[1].replace(/,/g, ''));
               parkingNote = pMatch[2] || "";
-              infoPart = infoPart.replace(/\[(?:P|🅿️).*?\]/, "").trim();
+              infoPart = infoPart.replace(/\[(?:P|🅿️).*?\]|\[(?:P|🅿️).*?$/, "").trim();
             }
 
             // 2. 방문 목적 추출 (괄호 안의 내용)
@@ -942,7 +944,12 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
             };
           }
           return null;
-        }).filter(Boolean) : null) || [
+        }).filter(Boolean) : null);
+
+      setFormData({
+        ...initialData,
+        date: initialData.date || new Date().toISOString().split('T')[0],
+        waypoints: (isWaypointsComplete ? initialData.waypoints : (parsedWaypoints && parsedWaypoints.length >= 2 ? parsedWaypoints : null)) || [
           { id: 'start', label: '출발지', address: initialData.departure || '', alias: '출발지', purpose: '출발', lat: initialData.startLat || 37.5665, lng: initialData.startLng || 126.9780, parkingFee: 0, parkingNote: '' },
           { id: 'end', label: '도착지', address: initialData.destination || '', alias: '도착지', purpose: '업무', lat: initialData.endLat || 37.4979, lng: initialData.endLng || 127.0276, parkingFee: 0, parkingNote: '' }
         ],
