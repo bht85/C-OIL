@@ -56,7 +56,8 @@ import {
   Calendar,
   X,
   Star,
-  Pencil
+  Pencil,
+  Check
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -1091,7 +1092,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
       purpose: initialData.purpose || '',
       fuelType: initialData.fuelType || profile?.fuelType || 'gasoline',
       distance: Number(initialData.distance) || 0,
-      isManualDistance: initialData.isManualDistance !== undefined ? initialData.isManualDistance : (initialData.distance > 0 ? true : false),
+      isManualDistance: false,
       isCorporate: initialData.isCorporate || false,
       vehicleId: initialData.vehicleId || '',
       odometerStart: initialData.odometerStart || 0,
@@ -1381,34 +1382,6 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
           </InputGroup>
         </div>
 
-        {/* ─── Minimal Corporate Controls (Only for assigned users) ─── */}
-        {formData.isCorporate && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-             <div className="flex items-center gap-3">
-                <div className="p-2 bg-slate-800 text-white rounded-xl"><Car size={16} /></div>
-                <div>
-                   <h4 className="text-xs font-black text-slate-800 tracking-tight">법인차량 운행 정보</h4>
-                   <p className="text-[9px] font-bold text-slate-400">Odometer: {formData.odometerStart.toLocaleString()} → {formData.odometerEnd.toLocaleString()} km</p>
-                </div>
-             </div>
-             <div className="flex bg-white p-1 rounded-xl border border-slate-200">
-                <button 
-                  type="button"
-                  onClick={() => setFormData({...formData, usageType: 'business'})}
-                  className={`px-5 py-2.5 rounded-lg text-[10px] font-black transition-all ${formData.usageType === 'business' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                  일반 업무용
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setFormData({...formData, usageType: 'commute'})}
-                  className={`px-5 py-2.5 rounded-lg text-[10px] font-black transition-all ${formData.usageType === 'commute' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                  출·퇴근용
-                </button>
-             </div>
-          </div>
-        )}
 
         <div className="space-y-4">
           <div className="flex justify-between items-center px-1">
@@ -1488,44 +1461,20 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
                         idx === 0 
                         ? 'bg-slate-100/50 text-slate-400 border-transparent cursor-not-allowed'
                         : (wp.purpose ? 'bg-white sm:bg-slate-50 border-transparent text-slate-600 focus:border-indigo-400 focus:bg-white' : 'bg-white sm:bg-slate-50 border-red-50 text-red-500 focus:border-red-200')
-                      }`}
-                      value={wp.purpose}
-                      onChange={(e) => handleStopPurposeChange(idx, e.target.value)}
-                    />
-                    {!wp.purpose && (
-                      <span className="absolute -top-5 right-1 text-[9px] font-black text-red-500 animate-pulse">필수</span>
-                    )}
-                  </div>
-
-                  <div className="flex w-full sm:w-auto items-center gap-3">
-                    <div className="flex-1 sm:w-24 relative">
-                      <input 
-                        type="number" 
-                        placeholder="주차비" 
-                        className="w-full pl-3 pr-8 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-white sm:bg-slate-50 border-none outline-none font-bold text-sm sm:text-xs text-indigo-600 focus:bg-indigo-50/50 transition-all text-right appearance-none"
-                        value={wp.parkingFee || ''}
-                        onChange={(e) => {
-                          const newWaypoints = [...formData.waypoints];
-                          newWaypoints[idx].parkingFee = parseInt(e.target.value) || 0;
-                          setFormData({ ...formData, waypoints: newWaypoints });
-                        }}
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-300">원</span>
-                    </div>
-
-                    {idx > 0 && idx < formData.waypoints.length - 1 ? (
-                      <button 
-                        type="button" 
-                        onClick={() => removeStop(idx)}
-                        className="p-3 bg-red-50 text-red-400 hover:text-red-600 sm:bg-transparent sm:text-slate-300 transition-all active:scale-90 rounded-xl"
-                      >
-                        <Trash2 size={20} />
-                      </button>
-                    ) : (
-                      <div className="w-10 sm:w-8"></div>
-                    )}
-                  </div>
-                </div>
+             <div className="flex flex-col justify-center">
+            <div className="flex items-center justify-between mb-3 sm:mb-2">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Total Distance</p>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <div className="text-4xl sm:text-5xl font-black text-slate-900 flex items-baseline gap-1 tracking-tight">
+                {formData.distance} <span className="text-xl text-slate-400">km</span>
+              </div>
+            </div>
+            <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 mt-3 px-1">
+              시스템 자동 산출 직선 거리 (1.25배 보정)
+            </p>
+          </div>
+   </div>
 
                 {wp.parkingFee > 0 && (
                   <div className="w-full animate-fade-in px-1">
@@ -1563,36 +1512,14 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
           <div className="flex flex-col justify-center">
             <div className="flex items-center justify-between mb-3 sm:mb-2">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Total Distance</p>
-              <button 
-                type="button"
-                onClick={() => setFormData(prev => ({ ...prev, isManualDistance: !prev.isManualDistance }))}
-                className={`text-[9px] sm:text-[10px] font-black px-3 py-2 rounded-xl transition-all ${
-                  formData.isManualDistance ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-100 text-slate-400 border border-slate-100'
-                }`}
-              >
-                {formData.isManualDistance ? '수동 보정 활성中' : '수동 입력 전환'}
-              </button>
             </div>
             <div className="flex items-baseline gap-1">
-              {formData.isManualDistance ? (
-                <div className="flex items-baseline gap-2 w-full">
-                  <input 
-                    type="number"
-                    step="0.1"
-                    className="w-full max-w-[120px] text-3xl sm:text-4xl font-black text-indigo-600 bg-transparent border-b-4 border-indigo-400 outline-none px-1"
-                    value={formData.distance}
-                    onChange={(e) => setFormData(prev => ({ ...prev, distance: parseFloat(e.target.value) || 0 }))}
-                  />
-                  <span className="text-xl font-black text-slate-400">km</span>
-                </div>
-              ) : (
-                <div className="text-4xl sm:text-5xl font-black text-slate-900 flex items-baseline gap-1 tracking-tight">
-                  {formData.distance} <span className="text-xl text-slate-400">km</span>
-                </div>
-              )}
+              <div className="text-4xl sm:text-5xl font-black text-slate-900 flex items-baseline gap-1 tracking-tight">
+                {formData.distance} <span className="text-xl text-slate-400">km</span>
+              </div>
             </div>
             <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 mt-3 px-1">
-              {formData.isManualDistance ? '실제 계기판 거리를 직접 입력하세요.' : '시스템 자동 산출 직선 거리 (1.25배 보정)'}
+              시스템 자동 산출 직선 거리 (1.25배 보정)
             </p>
           </div>
           <div className="p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-premium-gradient shadow-2xl shadow-indigo-200 text-white flex justify-between items-center transition-all duration-500 hover:scale-[1.02]">
@@ -2973,6 +2900,16 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, 
 const OrgChartView = ({ orgUnits, users, db, appId, setOrgUnits, onUpdateUser }) => {
   const [activeTab, setActiveTab] = useState('chart'); // 'chart' or 'members'
   const [memberSearch, setMemberSearch] = useState('');
+  const [showDisabledMembers, setShowDisabledMembers] = useState(false);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const matchesSearch = (u.userName || '').toLowerCase().includes(memberSearch.toLowerCase()) || 
+                            (u.department || '').toLowerCase().includes(memberSearch.toLowerCase());
+      const isVisible = showDisabledMembers || u.status !== 'disabled';
+      return matchesSearch && isVisible;
+    });
+  }, [users, memberSearch, showDisabledMembers]);
 
   const tree = useMemo(() => {
     const root = { name: 'Root', fullPath: '', children: {}, members: [] };
@@ -2990,6 +2927,10 @@ const OrgChartView = ({ orgUnits, users, db, appId, setOrgUnits, onUpdateUser })
     });
     users.forEach(u => {
       if (!u.department || u.department === '미지정') return;
+      // 조직도 트리에서는 일단 상태와 무관하게 표시하거나, 여기도 필터링을 원할 수도 있지만 보통 조직도에는 현재 인원만 표시하는 경우가 많음. 
+      // 하지만 명부 필터링이 주 요청이므로 명부 위주로 처리함.
+      if (!showDisabledMembers && u.status === 'disabled') return;
+
       const parts = u.department.split(' > ');
       let current = root;
       let found = true;
@@ -3000,7 +2941,7 @@ const OrgChartView = ({ orgUnits, users, db, appId, setOrgUnits, onUpdateUser })
       if (found) current.members.push(u);
     });
     return root;
-  }, [orgUnits, users]);
+  }, [orgUnits, users, showDisabledMembers]);
 
   const [selectedPath, setSelectedPath] = useState([]);
   
@@ -3230,8 +3171,14 @@ const OrgChartView = ({ orgUnits, users, db, appId, setOrgUnits, onUpdateUser })
                       onChange={e => setMemberSearch(e.target.value)}
                    />
                 </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-2xl border border-slate-100 shadow-sm cursor-pointer hover:bg-slate-50 transition-all" onClick={() => setShowDisabledMembers(!showDisabledMembers)}>
+                  <div className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${showDisabledMembers ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
+                    {showDisabledMembers && <Check size={10} className="text-white" />}
+                  </div>
+                  <span className="text-[11px] font-black text-slate-500 whitespace-nowrap">퇴사자 포함</span>
+                </div>
                 <div className="bg-indigo-50 px-5 py-3 rounded-2xl border border-indigo-100 text-sm font-black text-indigo-600 shrink-0">
-                  총 {users.length}명
+                  총 {filteredUsers.length}명
                 </div>
               </div>
            </div>
@@ -3247,7 +3194,7 @@ const OrgChartView = ({ orgUnits, users, db, appId, setOrgUnits, onUpdateUser })
                  </tr>
                </thead>
                <tbody className="divide-y divide-slate-50">
-                 {users
+                 {filteredUsers
                    .filter(u => 
                      (u.userName || '').toLowerCase().includes(memberSearch.toLowerCase()) || 
                      (u.department || '').toLowerCase().includes(memberSearch.toLowerCase())
