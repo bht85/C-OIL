@@ -970,6 +970,8 @@ const EmptyChart = ({ message }) => (
 const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVehicles }) => {
   // --- Helper: Robust Data Reconstruction ---
   const getInitialFormData = () => {
+    const assignedVehicle = corVehicles.find(v => v.assignedUser === profile?.uid);
+
     if (!initialData) {
       return {
         date: new Date().toISOString().split('T')[0],
@@ -978,14 +980,14 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
           { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
         ],
         purpose: '',
-        fuelType: profile?.fuelType || 'gasoline',
+        fuelType: assignedVehicle ? assignedVehicle.fuelType : (profile?.fuelType || 'gasoline'),
         distance: 0,
         isManualDistance: false,
-        isCorporate: false,
-        vehicleId: '',
-        odometerStart: 0,
-        odometerEnd: 0,
-        usageType: 'business' // 'business' or 'commute'
+        isCorporate: !!assignedVehicle,
+        vehicleId: assignedVehicle ? assignedVehicle.id : '',
+        odometerStart: assignedVehicle ? (assignedVehicle.currentOdometer || 0) : 0,
+        odometerEnd: assignedVehicle ? (assignedVehicle.currentOdometer || 0) : 0,
+        usageType: 'business'
       };
     }
 
@@ -1379,88 +1381,34 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
           </InputGroup>
         </div>
 
-        {/* ─── Corporate Vehicle Toggle ─── */}
-        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-xl transition-all ${formData.isCorporate ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                <Car size={18} />
-              </div>
-              <div>
-                <h4 className="text-sm font-black text-slate-800 tracking-tight">차량 선택</h4>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select Personal or Corporate</p>
-              </div>
-            </div>
-            <div className="flex bg-white p-1 rounded-xl border border-slate-200">
-               <button 
-                 type="button"
-                 onClick={() => setFormData({...formData, isCorporate: false})}
-                 className={`px-4 py-2 rounded-lg text-[11px] font-black transition-all ${!formData.isCorporate ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
-               >
-                 개인차량
-               </button>
-               <button 
-                 type="button"
-                 onClick={() => setFormData({...formData, isCorporate: true})}
-                 className={`px-4 py-2 rounded-lg text-[11px] font-black transition-all ${formData.isCorporate ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
-               >
-                 법인차량
-               </button>
-            </div>
-          </div>
-
-          {formData.isCorporate && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-slide-up">
-              <div className="space-y-2">
-                <InputLabel label="법인차량 선택" />
-                <select 
-                  className="w-full px-5 py-3.5 rounded-2xl bg-white border border-slate-200 font-bold outline-none focus:ring-4 focus:ring-indigo-100"
-                  value={formData.vehicleId}
-                  onChange={(e) => handleVehicleSelect(e.target.value)}
-                  required
+        {/* ─── Minimal Corporate Controls (Only for assigned users) ─── */}
+        {formData.isCorporate && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+             <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-800 text-white rounded-xl"><Car size={16} /></div>
+                <div>
+                   <h4 className="text-xs font-black text-slate-800 tracking-tight">법인차량 운행 정보</h4>
+                   <p className="text-[9px] font-bold text-slate-400">Odometer: {formData.odometerStart.toLocaleString()} → {formData.odometerEnd.toLocaleString()} km</p>
+                </div>
+             </div>
+             <div className="flex bg-white p-1 rounded-xl border border-slate-200">
+                <button 
+                  type="button"
+                  onClick={() => setFormData({...formData, usageType: 'business'})}
+                  className={`px-5 py-2.5 rounded-lg text-[10px] font-black transition-all ${formData.usageType === 'business' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
                 >
-                  <option value="">배정된 차량 선택</option>
-                  {corVehicles.map(v => (
-                    <option key={v.id} value={v.id}>{v.registrationNo} ({v.modelName})</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <InputLabel label="운행 용도 (국세청 제출용)" />
-                <div className="flex gap-2">
-                   <button 
-                     type="button"
-                     onClick={() => setFormData({...formData, usageType: 'business'})}
-                     className={`flex-1 py-3.5 rounded-2xl font-black text-xs border transition-all ${formData.usageType === 'business' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-100 text-slate-500'}`}
-                   >
-                     일반 업무용
-                   </button>
-                   <button 
-                     type="button"
-                     onClick={() => setFormData({...formData, usageType: 'commute'})}
-                     className={`flex-1 py-3.5 rounded-2xl font-black text-xs border transition-all ${formData.usageType === 'commute' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-100 text-slate-500'}`}
-                   >
-                     출·퇴근용
-                   </button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <InputLabel label="계기판 거리 (km)" />
-                <div className="flex items-center gap-2 font-mono text-sm">
-                   <div className="flex-1 bg-white border border-slate-200 p-3 rounded-2xl text-slate-400 text-center">
-                     <span className="text-[9px] block uppercase font-black text-slate-300 mb-1">Before</span>
-                     {formData.odometerStart.toLocaleString()}
-                   </div>
-                   <ChevronRight className="text-slate-300" size={16} />
-                   <div className="flex-1 bg-white border-2 border-indigo-100 p-3 rounded-2xl text-indigo-600 text-center font-black">
-                     <span className="text-[9px] block uppercase font-black text-indigo-300 mb-1">After</span>
-                     {formData.odometerEnd.toLocaleString()}
-                   </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+                  일반 업무용
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setFormData({...formData, usageType: 'commute'})}
+                  className={`px-5 py-2.5 rounded-lg text-[10px] font-black transition-all ${formData.usageType === 'commute' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  출·퇴근용
+                </button>
+             </div>
+          </div>
+        )}
 
         <div className="space-y-4">
           <div className="flex justify-between items-center px-1">
@@ -3017,7 +2965,7 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, 
         </div>
       )}
       {activeTab === 'fuel' && <SettingsPanel fuelRates={fuelRates} onUpdate={onUpdateSettings} db={db} appId={appId} />}
-      {activeTab === 'corporate' && <CorporateVehicleManager corVehicles={corVehicles} users={allUsers} db={db} appId={appId} />}
+      {activeTab === 'corporate' && <CorporateVehicleManager corVehicles={corVehicles} users={users} db={db} appId={appId} />}
     </div>
   );
 };
@@ -3917,7 +3865,7 @@ const ReportPDFTemplate = ({ innerRef, logs, profile, reportFilters, allUsers })
 
 const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
   const [isAdding, setIsAdding] = useState(false);
-  const [formData, setFormData] = useState({ registrationNo: '', modelName: '', fuelType: 'gasoline', currentOdometer: 0 });
+  const [formData, setFormData] = useState({ registrationNo: '', modelName: '', fuelType: 'gasoline', currentOdometer: 0, assignedUser: '' });
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -3931,7 +3879,7 @@ const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
       id
     });
     setIsAdding(false);
-    setFormData({ registrationNo: '', modelName: '', fuelType: 'gasoline', currentOdometer: 0 });
+    setFormData({ registrationNo: '', modelName: '', fuelType: 'gasoline', currentOdometer: 0, assignedUser: '' });
   };
 
   const handleDelete = async (id) => {
@@ -3960,7 +3908,7 @@ const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
 
       {isAdding && (
         <div className="premium-card p-10 rounded-[2.5rem] bg-indigo-50/30 border-2 border-indigo-100 animate-slide-up">
-          <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+          <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">차량 번호</label>
               <input 
@@ -3993,6 +3941,19 @@ const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
                 required
               />
             </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">전담 이용자 배정</label>
+              <select 
+                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-slate-200 font-bold outline-none focus:ring-4 focus:ring-indigo-100 transition-all"
+                value={formData.assignedUser}
+                onChange={e => setFormData({ ...formData, assignedUser: e.target.value })}
+              >
+                <option value="">이용자 미지정 (공용)</option>
+                {users.map(u => (
+                  <option key={u.uid} value={u.uid}>{u.userName} ({u.department})</option>
+                ))}
+              </select>
+            </div>
             <div className="flex gap-2">
               <button type="submit" className="flex-1 bg-indigo-600 text-white py-3.5 rounded-2xl font-black text-sm">저장</button>
               <button type="button" onClick={() => setIsAdding(false)} className="flex-1 bg-slate-200 text-slate-600 py-3.5 rounded-2xl font-black text-sm">취소</button>
@@ -4014,6 +3975,12 @@ const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
                 </div>
               </div>
               <h4 className="text-xl font-black text-slate-800 mb-2">{v.modelName}</h4>
+              <div className="mb-4">
+                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">전담 이용자</span>
+                 <div className="text-sm font-bold text-indigo-600">
+                    {users.find(u => u.uid === v.assignedUser)?.userName || '공용 차량'}
+                 </div>
+              </div>
               <div className="space-y-4 pt-4 border-t border-slate-50">
                 <div className="flex justify-between items-center text-sm font-bold">
                   <span className="text-slate-400">현재 누적 주행</span>
