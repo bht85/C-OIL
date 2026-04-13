@@ -3501,27 +3501,6 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, cor
         <StatCard title="최종 정산 합계" value={`${stats.totalAmount.toLocaleString()}원`} subtitle="유류비 + 주차비 총합" icon={<Calculator />} color="slate" />
       </div>
 
-      {/* Report Tab Switcher */}
-      <div className="flex gap-4 p-2 bg-slate-100/50 rounded-[2rem] w-fit mx-auto">
-        <button 
-          onClick={() => setActiveTab('summary')}
-          className={`px-10 py-4 rounded-2xl font-black text-sm transition-all ${activeTab === 'summary' ? 'bg-white text-indigo-600 shadow-md translate-y-0' : 'text-slate-400 hover:text-slate-600 hover:translate-y-[-2px]'}`}
-        >
-          부서별 정산 요약 리포트
-        </button>
-        <button 
-          onClick={() => setActiveTab('details')}
-          className={`px-10 py-4 rounded-2xl font-black text-sm transition-all ${activeTab === 'details' ? 'bg-white text-indigo-600 shadow-md translate-y-0' : 'text-slate-400 hover:text-slate-600 hover:translate-y-[-2px]'}`}
-        >
-          전체 상세 운행 내역
-        </button>
-        <button 
-          onClick={() => setActiveTab('official')}
-          className={`px-10 py-4 rounded-2xl font-black text-sm transition-all ${activeTab === 'official' ? 'bg-white text-indigo-600 shadow-md translate-y-0' : 'text-slate-400 hover:text-slate-600 hover:translate-y-[-2px]'}`}
-        >
-          <Car size={16} className="inline mr-2" /> 국세청 운행기록부
-        </button>
-      </div>
 
       {activeTab === 'summary' ? (
         <div className="premium-card p-10 rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 animate-slide-up">
