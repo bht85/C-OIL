@@ -137,9 +137,9 @@ const App = () => {
   const [reportFilters, setReportFilters] = useState({
     department: 'all',
     userId: 'all',
-    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
-    endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10),
-    selectedMonth: new Date().toISOString().slice(0, 7)
+    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('sv-SE'),
+    endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toLocaleDateString('sv-SE'),
+    selectedMonth: new Date().toLocaleDateString('sv-SE').slice(0, 7)
   });
   const [corVehicles, setCorVehicles] = useState([]);
 
@@ -534,7 +534,7 @@ const App = () => {
 
   const handleExportData = () => {
     let dataToExport = logs;
-    let filename = `운행정산내역_${new Date().toISOString().slice(0, 10)}.csv`;
+    let filename = `운행정산내역_${new Date().toLocaleDateString('sv-SE')}.csv`;
 
     if (view === 'reports') {
       dataToExport = logs.filter(log => {
@@ -3320,8 +3320,8 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, cor
   // 월 변경 시 시작/종료일 자동 설정
   const handleMonthChange = (month) => {
     const [year, m] = month.split('-').map(Number);
-    const start = new Date(year, m - 1, 1).toISOString().slice(0, 10);
-    const end = new Date(year, m, 0).toISOString().slice(0, 10);
+    const start = new Date(year, m - 1, 1).toLocaleDateString('sv-SE');
+    const end = new Date(year, m, 0).toLocaleDateString('sv-SE');
     onFilterChange(prev => ({ ...prev, selectedMonth: month, startDate: start, endDate: end }));
   };
 
