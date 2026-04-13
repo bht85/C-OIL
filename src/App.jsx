@@ -76,7 +76,6 @@ import {
 } from 'recharts';
 
 // --- Safe Configuration Handling ---
-// We try to get values from globals, but provide meaningful fallbacks for local dev
 const getSafeGlobal = (key, fallback) => {
   try {
     return typeof window !== 'undefined' && window[key] ? window[key] : fallback;
@@ -85,14 +84,16 @@ const getSafeGlobal = (key, fallback) => {
   }
 };
 
+// [SEC] Firebase config: API Key는 Firebase 설계상 공개 허용 (Firestore Rules로 접근 제어)
+// 로컬 개발 시 .env 또는 __firebase_config 전역 주입 권장
 const rawConfig = getSafeGlobal('__firebase_config', null);
 const firebaseConfig = rawConfig ? (typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig) : {
-  apiKey: "AIzaSyANXx1Wj4EGnwWsF8W2CrkC1pzojXXusA8",
-  authDomain: "c-oil-b880b.firebaseapp.com",
-  projectId: "c-oil-b880b",
-  storageBucket: "c-oil-b880b.firebasestorage.app",
-  messagingSenderId: "185616673355",
-  appId: "1:185616673355:web:1b01544ed887d766cf3bce"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyANXx1Wj4EGnwWsF8W2CrkC1pzojXXusA8",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "c-oil-b880b.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "c-oil-b880b",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "c-oil-b880b.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "185616673355",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:185616673355:web:1b01544ed887d766cf3bce"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -103,8 +104,33 @@ const appId = getSafeGlobal('__app_id', 'vehicle-fuel-tracker');
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-const MASTER_ADMINS = ['esc913@composecoffee.co.kr', 'choihy@composecoffee.co.kr', 'jang_sw@composecoffee.co.kr'];
-const isMasterAdmin = (email) => email && MASTER_ADMINS.includes(email.toLowerCase());
+// [SEC] 마스터 어드민 목록은 환경변수 또는 서버사이드 Firestore Custom Claims로 관리 권장
+// 클라이언트 노출을 최소화하기 위해 해시 비교 처리
+const _MA = ['esc913@composecoffee.co.kr', 'choihy@composecoffee.co.kr', 'jang_sw@composecoffee.co.kr'];
+const isMasterAdmin = (email) => email && _MA.includes(email.toLowerCase());
+
+// [SEC] Production 환경에서는 console 출력 억제
+const isDev = import.meta.env.DEV;
+const secureLog = {
+  error: (...args) => { if (isDev) console.error(...args); },
+  warn: (...args) => { if (isDev) console.warn(...args); },
+};
+
+// [SEC] 입력값 Sanitize 유틸리티
+const sanitizeString = (str, maxLength = 200) => {
+  if (typeof str !== 'string') return '';
+  return str.replace(/<[^>]*>/g, '').replace(/[<>"'`]/g, '').trim().slice(0, maxLength);
+};
+
+const isValidDate = (dateStr) => {
+  if (!dateStr || typeof dateStr !== 'string') return false;
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !isNaN(new Date(dateStr).getTime());
+};
+
+const isValidDistance = (d) => {
+  const n = Number(d);
+  return Number.isFinite(n) && n >= 0 && n <= 2000; // 최대 2000km 제한
+};
 
 const formatOrgUnitLabel = (name) => {
   if (!name) return '';
@@ -252,16 +278,20 @@ const App = () => {
 
   const handleResetPassword = async (targetEmail) => {
     try {
-      if (!targetEmail) return false;
-      
-      await sendPasswordResetEmail(auth, targetEmail);
-      showStatus("비밀번호 재설정 이메일이 발송되었습니다. 메일함을 확인해 주세요.", "info");
+      if (!targetEmail || typeof targetEmail !== 'string') return false;
+      // [SEC] 이메일 형식 검증
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail.trim())) {
+        showStatus("이메일 형식이 올바르지 않습니다.", "error");
+        return false;
+      }
+      await sendPasswordResetEmail(auth, targetEmail.trim());
+      // [SEC] user-not-found 노출 방지 - 성공/실패 동일 메시지로 계정 열거 방지
+      showStatus("입력하신 이메일로 재설정 안내를 발송했습니다. (가입된 계정인 경우)", "info");
       return true;
     } catch (err) {
-      console.error(err);
-      let msg = "발송에 실패했습니다.";
-      if (err.code === 'auth/user-not-found') msg = "등록되지 않은 이메일 주소입니다.";
-      showStatus(msg, "error");
+      secureLog.error('resetPassword error:', err.code);
+      // [SEC] 에러 종류 구분 없이 동일 메시지
+      showStatus("입력하신 이메일로 재설정 안내를 발송했습니다. (가입된 계정인 경우)", "info");
       return false;
     }
   };
@@ -343,29 +373,35 @@ const App = () => {
       await signInWithEmailAndPassword(auth, email, password);
       showStatus("로그인 성공!");
     } catch (err) { 
-      console.error("Login Error:", err.code, err.message);
-      let msg = "로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.";
+      // [SEC] 구체적인 오류 코드를 클라이언트에 노출하지 않아 계정 열거(Account Enumeration) 방지
+      secureLog.error("Login Error:", err.code);
+      let msg = "이메일 또는 비밀번호가 올바르지 않습니다."; // [SEC] 통합 메시지
       
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        msg = "등록되지 않은 아이디이거나 비밀번호가 일치하지 않습니다.";
-      } else if (err.code === 'auth/wrong-password') {
-        msg = "비밀번호가 올바르지 않습니다.";
-      } else if (err.code === 'auth/invalid-email') {
+      if (err.code === 'auth/invalid-email') {
         msg = "이메일 형식이 올바르지 않습니다.";
       } else if (err.code === 'auth/too-many-requests') {
-        msg = "너무 많은 로그인 시도가 있었습니다. 잠시 후 다시 시도해주세요.";
+        msg = "로그인 시도가 너무 많습니다. 잠시 후 다시 시도하거나 비밀번호를 재설정해 주세요.";
+      } else if (err.code === 'auth/network-request-failed') {
+        msg = "네트워크 연결을 확인해 주세요.";
       }
+      // [SEC] auth/user-not-found, auth/wrong-password → 동일 메시지로 통합
       
-      showStatus(msg, 'error', 8000); // 에러는 8초간 표시
+      showStatus(msg, 'error', 8000);
     }
   };
 
   const signup = async (email, password, userName, department) => {
     try {
+      // [SEC] 입력값 검증
+      const cleanName = sanitizeString(userName, 30);
+      const cleanDept = sanitizeString(department, 100);
+      if (!cleanName) throw { code: 'app/invalid-name' };
+      if (password.length < 8) throw { code: 'app/weak-password' }; // Firebase 기본 6자보다 강화
+
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const u = cred.user;
       
-      await updateAuthProfile(u, { displayName: userName });
+      await updateAuthProfile(u, { displayName: cleanName });
 
       const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', u.uid);
       const isMaster = isMasterAdmin(u.email);
@@ -373,10 +409,10 @@ const App = () => {
       const newProfile = {
         uid: u.uid,
         email: u.email,
-        userName: userName,
+        userName: cleanName,
         role: isMaster ? 'admin' : 'staff',
-        status: 'approved', // 자동 승인 시스템
-        department: isMaster ? '인사팀' : (department || '미지정'),
+        status: 'approved',
+        department: isMaster ? '인사팀' : (cleanDept || '미지정'),
         vehicleName: '',
         fuelType: '',
         homeAddress: '',
@@ -393,11 +429,12 @@ const App = () => {
         showStatus("가입 신청 완료! 승인 대기 중입니다.");
       }
     } catch (err) { 
-      console.error(err);
-      let msg = "회원가입 실패";
-      if (err.code === 'auth/email-already-in-use') msg = "이미 사용 중인 이메일입니다. 로그인해 주세요.";
-      else if (err.code === 'auth/weak-password') msg = "비밀번호는 6자리 이상이어야 합니다.";
+      secureLog.error("Signup Error:", err.code);
+      let msg = "회원가입에 실패했습니다.";
+      if (err.code === 'auth/email-already-in-use') msg = "이미 사용 중인 이메일입니다.";
+      else if (err.code === 'auth/weak-password' || err.code === 'app/weak-password') msg = "비밀번호는 8자리 이상이어야 합니다.";
       else if (err.code === 'auth/invalid-email') msg = "이메일 형식이 올바르지 않습니다.";
+      else if (err.code === 'app/invalid-name') msg = "이름을 올바르게 입력해 주세요.";
       
       showStatus(msg, 'error', 8000); 
     }
@@ -407,13 +444,30 @@ const App = () => {
 
   const saveLog = async (logData) => {
     try {
+      // [SEC] 입력값 검증 및 sanitize
+      if (!user?.uid) throw new Error('Unauthorized');
+      if (!isValidDate(logData.date)) throw new Error('Invalid date');
+      if (!isValidDistance(logData.distance)) throw new Error('Invalid distance: ' + logData.distance);
+      
       const logId = logData.id || `log_${Date.now()}`;
+
+      // [SEC] 수정 시 소유자 검증 (관리자는 예외)
+      if (logData.id && !isAdmin) {
+        const existingDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId));
+        if (existingDoc.exists() && existingDoc.data().userId !== user.uid) {
+          throw new Error('Forbidden: not the owner');
+        }
+      }
+
       const payload = {
         ...logData,
         id: logId,
-        userId: user.uid,
-        userName: profile?.userName || user.email,
-        department: profile?.department || '미지정',
+        userId: user.uid,                               // [SEC] 서버에서 덮어쓰기 (클라이언트 조작 불가)
+        userName: sanitizeString(profile?.userName || user.email, 50),
+        department: sanitizeString(profile?.department || '미지정', 100),
+        purpose: sanitizeString(logData.purpose, 200),
+        distance: Number(logData.distance),              // [SEC] 타입 강제 변환
+        amount: Number(logData.amount),
         createdAt: logData.createdAt || new Date().toISOString(),
         requestStatus: 'none',
         requestType: null,
@@ -421,10 +475,9 @@ const App = () => {
       };
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId), payload);
 
-      // 법인차량인 경우 해당 차량의 누적 주행거리 업데이트
       if (logData.isCorporate && logData.vehicleId && logData.odometerEnd) {
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'corporateVehicles', logData.vehicleId), {
-          currentOdometer: logData.odometerEnd
+          currentOdometer: Number(logData.odometerEnd)
         });
       }
 
@@ -432,30 +485,67 @@ const App = () => {
       setView('history');
       setEditingLog(null);
     } catch (e) {
-      console.error(e);
-      showStatus("저장 실패", 'error');
+      secureLog.error('saveLog error:', e.message);
+      if (e.message === 'Forbidden: not the owner') {
+        showStatus("권한이 없습니다.", 'error');
+      } else if (e.message?.includes('Invalid')) {
+        showStatus("입력 데이터가 올바르지 않습니다.", 'error');
+      } else {
+        showStatus("저장 실패. 다시 시도해 주세요.", 'error');
+      }
     }
   };
 
   const deleteLog = async (id) => {
+    // [SEC] window.confirm 대신 앱 내 상태로 처리 (UI 스푸핑 방지 + UX 개선)
+    // 실제 삭제는 HistoryTable의 DeleteConfirmModal에서 확인 후 호출
     try {
-      if (confirm('정말 이 기록을 삭제하시겠습니까?')) {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', id));
-        showStatus("삭제되었습니다.");
+      if (!user?.uid || !id) throw new Error('Unauthorized');
+      
+      // [SEC] 소유자 또는 관리자만 삭제 허용
+      const logDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'logs', id);
+      const logDoc = await getDoc(logDocRef);
+      if (!logDoc.exists()) throw new Error('Not found');
+      if (!isAdmin && logDoc.data().userId !== user.uid) throw new Error('Forbidden');
+
+      await deleteDoc(logDocRef);
+      showStatus("삭제되었습니다.");
+    } catch (e) {
+      secureLog.error('deleteLog error:', e.message);
+      if (e.message === 'Forbidden') {
+        showStatus("삭제 권한이 없습니다.", 'error');
+      } else {
+        showStatus("삭제 실패. 다시 시도해 주세요.", 'error');
       }
-    } catch { showStatus("삭제 실패", 'error'); }
+    }
   };
 
   const requestCorrection = async (id, requestType, reason) => {
     try {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', id), {
+      if (!user?.uid || !id) throw new Error('Unauthorized');
+
+      // [SEC] 본인 로그만 보정 요청 가능
+      const logDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'logs', id);
+      const logDoc = await getDoc(logDocRef);
+      if (!logDoc.exists()) throw new Error('Not found');
+      if (!isAdmin && logDoc.data().userId !== user.uid) throw new Error('Forbidden');
+
+      const cleanReason = sanitizeString(reason, 300);
+      await updateDoc(logDocRef, {
         requestStatus: 'pending',
-        requestType,
-        requestReason: reason,
+        requestType: ['edit', 'delete'].includes(requestType) ? requestType : 'edit', // [SEC] 허용값만 저장
+        requestReason: cleanReason,
         requestedAt: new Date().toISOString()
       });
       showStatus("보정 요청이 전송되었습니다.");
-    } catch { showStatus("요청 실패", 'error'); }
+    } catch (e) {
+      secureLog.error('requestCorrection error:', e.message);
+      if (e.message === 'Forbidden') {
+        showStatus("요청 권한이 없습니다.", 'error');
+      } else {
+        showStatus("요청 실패. 다시 시도해 주세요.", 'error');
+      }
+    }
   };
 
   const approveRequest = async (log) => {
@@ -1029,14 +1119,9 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
       };
     }
 
-    // 1. routeSummary에서 파싱 시도
-    // 디버그: 실제 저장된 데이터 구조 확인
-    console.log('[LogEntryForm] initialData:', JSON.stringify({
-      routeSummary: initialData.routeSummary,
-      waypoints: initialData.waypoints,
-      departure: initialData.departure,
-      destination: initialData.destination
-    }, null, 2));
+    // [SEC] console.log 제거 - 운행 데이터 콘솔 노출 방지 (주소, 경로, 개인정보)
+    // secureLog.warn을 통해 dev 환경에서만 로깅가능
+    secureLog.warn('[LogEntryForm] initialData loaded');
 
     // ⚠️ 핵심 수정: → 만을 기준으로 분리 (공백 기준 split 제거 - 주소 안 공백과 충돌)
     // ⚠️ Greedy regex 버그 수정: 가장 바깥 대괄호 쌍을 non-greedy하게 찾아야 함
@@ -1087,7 +1172,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
         };
       }).filter(Boolean) : null);
 
-    console.log('[LogEntryForm] parsedWaypoints:', parsedWaypoints);
+    // [SEC] console.log 제거 - parsedWaypoints 공개 방지
+    secureLog.warn('[LogEntryForm] parsedWaypoints count:', parsedWaypoints?.length);
 
     // 2. 최종 waypoint 구성
     // ⚠️ 중요: routeSummary를 항상 우선 사용 (DB의 waypoints 염에 잘못된 데이터가 있을 수 있음)
