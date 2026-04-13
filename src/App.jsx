@@ -579,7 +579,7 @@ const App = () => {
     
     try {
       const canvas = await html2canvas(pdfRef.current, {
-        scale: 2, // Higher scale for better quality
+        scale: 2,
         useCORS: true,
         logging: false,
         backgroundColor: "#ffffff"
@@ -587,18 +587,32 @@ const App = () => {
       
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: 'landscape',
         unit: 'mm',
         format: 'a4'
       });
       
       const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      const pageWidth = pdf.internal.pageSize.getWidth(); // 297mm
+      const pageHeight = pdf.internal.pageSize.getHeight(); // 210mm
       
-      // If height is greater than A4, we might need multiple pages, 
-      // but for now, we'll scale it to fit one page or handle simple multi-page later if needed.
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      // Calculate image height in mm to maintain aspect ratio
+      const imgHeightOnPage = (imgProps.height * pageWidth) / imgProps.width;
+      
+      let heightLeft = imgHeightOnPage;
+      let position = 0;
+      
+      // Add first page
+      pdf.addImage(imgData, 'PNG', 0, position, pageWidth, imgHeightOnPage);
+      heightLeft -= pageHeight;
+      
+      // Add additional pages if needed
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeightOnPage;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pageWidth, imgHeightOnPage);
+        heightLeft -= pageHeight;
+      }
       
       const filename = `유류비_정산리포트_${reportFilters.selectedMonth || 'export'}.pdf`;
       pdf.save(filename);
@@ -1434,23 +1448,23 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
                       <div className="w-10 sm:w-8"></div>
                     )}
                   </div>
-                  
-                  {wp.parkingFee > 0 && (
-                    <div className="w-full animate-fade-in sm:mt-1">
-                      <input 
-                        type="text"
-                        placeholder="주차 사유/장소 (예: 유료주차장, 발렛 등)"
-                        className="w-full px-4 py-3 rounded-xl bg-indigo-50/30 border border-indigo-100/50 outline-none font-bold text-xs text-indigo-700"
-                        value={wp.parkingNote || ''}
-                        onChange={(e) => {
-                          const newWaypoints = [...formData.waypoints];
-                          newWaypoints[idx].parkingNote = e.target.value;
-                          setFormData({ ...formData, waypoints: newWaypoints });
-                        }}
-                      />
-                    </div>
-                  )}
                 </div>
+
+                {wp.parkingFee > 0 && (
+                  <div className="w-full animate-fade-in px-1">
+                    <input 
+                      type="text"
+                      placeholder="주차 사유/장소 (예: 유료주차장, 발렛 등)"
+                      className="w-full px-4 py-3 rounded-xl bg-indigo-50/30 border border-indigo-100/50 outline-none font-bold text-xs text-indigo-700 focus:bg-indigo-50 transition-all"
+                      value={wp.parkingNote || ''}
+                      onChange={(e) => {
+                        const newWaypoints = [...formData.waypoints];
+                        newWaypoints[idx].parkingNote = e.target.value;
+                        setFormData({ ...formData, waypoints: newWaypoints });
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -3640,108 +3654,100 @@ const ReportPDFTemplate = ({ innerRef, logs, profile, reportFilters, allUsers })
   const dateStr = reportFilters.selectedMonth ? `${reportFilters.selectedMonth.split('-')[0]}년 ${reportFilters.selectedMonth.split('-')[1]}월` : '전체 내역';
 
   return (
-    <div ref={innerRef} style={{ width: '800px', padding: '60px', backgroundColor: '#ffffff' }} className="font-['Outfit']">
-      {/* Header Section */}
-      <div className="flex justify-between items-start border-b-4 border-slate-900 pb-10 mb-10">
+    <div ref={innerRef} style={{ width: '1120px', padding: '40px 60px', backgroundColor: '#ffffff' }} className="font-['Outfit']">
+      {/* 1. Header Row */}
+      <div className="flex justify-between items-center mb-6 border-b-2 border-slate-100 pb-5">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tighter mb-2">업무용 유류비 정산 리포트</h1>
-          <p className="text-lg font-bold text-slate-400 uppercase tracking-[0.3em]">Fuel Settlement Business Report</p>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tighter">유류비 정산 이력 리포트</h1>
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Fuel Settlement History Report</p>
         </div>
         <div className="text-right">
-          <div className="text-2xl font-black text-indigo-600 mb-1">{dateStr}</div>
-          <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Published by C-OIL System</div>
+          <div className="text-2xl font-black text-indigo-600">{dateStr}</div>
+          <div className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-1">Digital Generated by C-OIL System</div>
         </div>
       </div>
 
-      {/* Profile Section */}
-      <div className="grid grid-cols-2 gap-10 mb-12">
-        <div className="space-y-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-xl">
-              {profile?.userName?.[0] || 'U'}
-            </div>
-            <div>
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Requester Information</div>
-              <div className="text-xl font-black text-slate-900">{profile?.userName} <span className="text-sm text-slate-400 ml-2">{profile?.department}</span></div>
-            </div>
+      {/* 2. Summary Dashboard (Top Aligned) */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="bg-slate-900 rounded-2xl p-5 text-white text-center shadow-lg">
+          <div className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1 opacity-80">Final Total / 총 정산액</div>
+          <div className="text-2xl font-black">₩ {stats.totalAmount.toLocaleString()}</div>
+        </div>
+        <div className="bg-white border border-slate-100 rounded-2xl p-5 text-center shadow-sm">
+          <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 text-indigo-500">Fuel Cost / 유류 지원비</div>
+          <div className="text-xl font-black text-slate-800">₩ {stats.totalFuel.toLocaleString()}</div>
+        </div>
+        <div className="bg-white border border-slate-100 rounded-2xl p-5 text-center shadow-sm">
+          <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 text-orange-500">Parking / 주차비</div>
+          <div className="text-xl font-black text-slate-800">₩ {stats.totalParking.toLocaleString()}</div>
+        </div>
+        <div className="bg-white border border-slate-100 rounded-2xl p-5 text-center shadow-sm">
+          <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 text-slate-400">Total Distance / 주행거리</div>
+          <div className="text-xl font-black text-slate-800">{stats.totalDist.toFixed(1)} km</div>
+        </div>
+      </div>
+
+      {/* 3. Requester Business Identity */}
+      <div className="flex items-center justify-between gap-8 bg-slate-50/50 p-5 rounded-2xl mb-8 border border-slate-100">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-slate-800 text-white flex items-center justify-center font-black text-lg">
+            {profile?.userName?.[0] || 'U'}
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Vehicle Info</div>
-              <div className="text-sm font-black text-slate-700">{profile?.vehicleName || '-'} ({profile?.regNo || '미기재'})</div>
-            </div>
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fuel Type</div>
-              <div className="text-sm font-black text-slate-700 uppercase">{profile?.fuelType === 'gasoline' ? '휘발유' : profile?.fuelType === 'diesel' ? '경유' : 'LPG'}</div>
-            </div>
+          <div>
+            <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Requester Identity</div>
+            <div className="text-base font-black text-slate-800">{profile?.userName} <span className="text-[10px] text-slate-400 ml-2 font-bold">{profile?.department}</span></div>
           </div>
         </div>
         
-        {/* Settlement Summary */}
-        <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-100 flex flex-col justify-between">
-          <div className="text-[10px] font-black text-indigo-200 uppercase tracking-[0.2em] mb-4 text-center">Final Settlement Calculation</div>
-          <div className="flex justify-between items-end">
-            <div>
-              <div className="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-1">Total Payment</div>
-              <div className="text-4xl font-black">₩ {stats.totalAmount.toLocaleString()}</div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-black text-indigo-200 opacity-80">{stats.count} Total Trips</div>
-            </div>
+        <div className="flex gap-8 pr-2">
+          <div className="text-right">
+            <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Vehicle / 차량</div>
+            <div className="text-[11px] font-black text-slate-700">{profile?.vehicleName || '-'} ({profile?.regNo || '미기재'})</div>
+          </div>
+          <div className="text-right border-l border-slate-200 pl-8">
+            <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Items / 건수</div>
+            <div className="text-[11px] font-black text-slate-700">{stats.count} Total Records</div>
           </div>
         </div>
       </div>
 
-      {/* Key Metrics Dashboard */}
-      <div className="grid grid-cols-3 gap-6 mb-12">
-        <div className="bg-white border border-slate-100 p-6 rounded-3xl text-center shadow-sm">
-          <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Cumulative Dist.</div>
-          <div className="text-2xl font-black text-slate-800">{stats.totalDist.toFixed(1)} km</div>
-        </div>
-        <div className="bg-white border border-slate-100 p-6 rounded-3xl text-center shadow-sm">
-          <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Fuel Allowance</div>
-          <div className="text-2xl font-black text-indigo-600">₩ {stats.totalFuel.toLocaleString()}</div>
-        </div>
-        <div className="bg-white border border-slate-100 p-6 rounded-3xl text-center shadow-sm">
-          <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Parking Expenses</div>
-          <div className="text-2xl font-black text-orange-500">₩ {stats.totalParking.toLocaleString()}</div>
-        </div>
-      </div>
-
-      {/* Detailed Log Table */}
-      <div className="mb-16">
-        <div className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] mb-6 pl-1 flex items-center justify-between">
-          <span>Detailed Movement Logs</span>
-          <span className="text-slate-300 font-bold">Standard: Naver Maps API v3.0 (C-OIL Verified)</span>
+      {/* 4. Movement History Table */}
+      <div className="min-h-[400px]">
+        <div className="flex items-center justify-between mb-4 px-1">
+          <h2 className="text-[9px] font-black text-slate-800 uppercase tracking-[0.2em] flex items-center gap-2">
+            <div className="w-1 h-1 rounded-full bg-indigo-500"></div> Detailed Movement Records
+          </h2>
+          <span className="text-[8px] font-bold text-slate-300">SYSTEM VERIFIED LOGS</span>
         </div>
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-slate-900 text-white text-left">
-              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest rounded-tl-xl">Date / Info</th>
-              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest">Route Summary</th>
-              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest">Travel Purpose</th>
-              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest rounded-tr-xl text-right">Settlement</th>
+            <tr className="bg-slate-800 text-white text-left">
+              <th className="px-5 py-3 text-[8px] font-black uppercase tracking-widest rounded-tl-xl w-[110px]">Date / Type</th>
+              <th className="px-5 py-3 text-[8px] font-black uppercase tracking-widest">Route Navigation Summary (Paths)</th>
+              <th className="px-5 py-3 text-[8px] font-black uppercase tracking-widest w-[160px]">Purpose</th>
+              <th className="px-5 py-3 text-[8px] font-black uppercase tracking-widest text-right w-[90px]">Dist.</th>
+              <th className="px-5 py-3 text-[8px] font-black uppercase tracking-widest text-right rounded-tr-xl w-[130px]">Settlement (₩)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredLogs.map((log, idx) => (
-              <tr key={log.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                <td className="px-6 py-5">
-                  <div className="font-black text-slate-900 text-sm mb-0.5">{log.date}</div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{log.fuelType}</div>
+              <tr key={log.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/20'}>
+                <td className="px-5 py-3">
+                  <div className="font-black text-slate-800 text-[11px]">{log.date}</div>
+                  <div className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">{log.fuelType}</div>
                 </td>
-                <td className="px-6 py-5">
-                  <div className="text-[12px] font-black text-slate-700 mb-1">{log.routeSummary}</div>
-                  <div className="text-[10px] font-bold text-slate-400 flex items-center gap-2">
-                    <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded-md text-indigo-600">{log.distance}km</span>
-                  </div>
+                <td className="px-5 py-3">
+                  <div className="text-[11px] font-black text-slate-700 leading-normal">{log.routeSummary}</div>
                 </td>
-                <td className="px-6 py-5">
-                  <div className="text-[12px] font-bold text-slate-500 italic max-w-xs overflow-hidden text-ellipsis line-clamp-2">{log.purpose}</div>
+                <td className="px-5 py-3">
+                  <div className="text-[10px] font-bold text-slate-400 italic truncate">{log.purpose}</div>
                 </td>
-                <td className="px-6 py-5 text-right">
-                  <div className="font-black text-slate-900 text-sm">₩ {Number(log.amount).toLocaleString()}</div>
-                  {Number(log.parkingTotal) > 0 && <div className="text-[10px] font-bold text-orange-400">P: {Number(log.parkingTotal).toLocaleString()}</div>}
+                <td className="px-5 py-3 text-right">
+                  <div className="font-black text-indigo-500 text-[11px]">{Number(log.distance).toFixed(1)}</div>
+                </td>
+                <td className="px-5 py-3 text-right">
+                  <div className="font-black text-slate-900 text-[12px]">₩ {Number(log.amount).toLocaleString()}</div>
+                  {Number(log.parkingTotal) > 0 && <div className="text-[8px] font-bold text-orange-400">P: {Number(log.parkingTotal).toLocaleString()}</div>}
                 </td>
               </tr>
             ))}
@@ -3749,27 +3755,9 @@ const ReportPDFTemplate = ({ innerRef, logs, profile, reportFilters, allUsers })
         </table>
       </div>
 
-      {/* Signature Section */}
-      <div className="grid grid-cols-3 gap-10 border-t-2 border-slate-100 pt-16">
-        <div className="flex flex-col items-center">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-12">Requester / 기안자</div>
-          <div className="w-full border-b border-slate-300 mb-2"></div>
-          <div className="text-sm font-black text-slate-900">{profile?.userName} (印)</div>
-        </div>
-        <div className="flex flex-col items-center">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-12">Approver / 팀장급 승인</div>
-          <div className="w-full border-b border-slate-300 mb-2"></div>
-          <div className="text-sm font-black text-slate-400 italic">Signature Required</div>
-        </div>
-        <div className="flex flex-col items-center">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-12">Finance / 최종 정산 확인</div>
-          <div className="w-full border-b border-slate-300 mb-2"></div>
-          <div className="text-sm font-black text-slate-400 italic">Settlement Verified</div>
-        </div>
-      </div>
-
-      <div className="mt-20 text-center">
-        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-[0.5em]">This document was digitally generated by C-OIL Smart Fuel Settlement Platform</p>
+      {/* 5. Footer */}
+      <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+        <p className="text-[8px] font-bold text-slate-300 uppercase tracking-[0.5em]">Reimbursement Submission Document • C-OIL Smart Fuel Platform</p>
       </div>
     </div>
   );
