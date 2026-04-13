@@ -641,7 +641,7 @@ const App = () => {
               </header>
               <main className="max-w-7xl">
                 {view === 'dashboard' && <Dashboard logs={logs} profile={profile} users={allUsers} orgUnits={orgUnits} />}
-                {view === 'log' && <LogEntryForm fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} />}
+                {view === 'log' && <LogEntryForm key={editingLog?.id || 'new'} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} />}
                 {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} isAdmin={isAdmin} onRequestCorrection={requestCorrection} onUpdateLog={saveLog} onEdit={(log) => { setEditingLog(log); setView('log'); }} />}
                 {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} />}
                 {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} />}
@@ -878,109 +878,117 @@ const EmptyChart = ({ message }) => (
 );
 
 const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
+  // --- Helper: Robust Data Reconstruction ---
+  const getInitialFormData = () => {
+    if (!initialData) {
+      return {
+        date: new Date().toISOString().split('T')[0],
+        waypoints: [
+          { id: 'start', label: '출발지', address: '', alias: '', purpose: '출발', lat: 37.5665, lng: 126.9780, parkingFee: 0, parkingNote: '' },
+          { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
+        ],
+        purpose: '',
+        fuelType: profile?.fuelType || 'gasoline',
+        distance: 0,
+        isManualDistance: false
+      };
+    }
+
+    // 1. routeSummary에서 파싱 시도 (가장 최신의 텍스트 정보가 담겨있는 필드)
+    const parsedWaypoints = (initialData.routeSummary ? initialData.routeSummary.split(/\s*[→>▶]\s*|\s{2,}/).map((segment, idx, allSegs) => {
+        const outerMatch = segment.trim().match(/^\[(.*)\]\s*(.*)$/);
+        if (outerMatch) {
+          let infoPart = outerMatch[1];
+          let address = outerMatch[2] || "";
+          let purpose = "";
+          let parkingFee = 0;
+          let parkingNote = "";
+
+          const pMatch = infoPart.match(/\[(?:P|🅿️)\s?([\d,]+)(?::\s?([^\]]*))?\]/);
+          if (pMatch) {
+            parkingFee = Number(pMatch[1].replace(/,/g, ''));
+            parkingNote = pMatch[2] || "";
+            infoPart = infoPart.replace(/\[(?:P|🅿️).*?\]|\[(?:P|🅿️).*?$/, "").trim();
+          }
+
+          let alias = infoPart;
+          const purpMatch = alias.match(/\(([^)]+)\)/);
+          if (purpMatch) {
+            purpose = purpMatch[1];
+            alias = alias.replace(/\([^)]+\)/, "").trim();
+          }
+
+          alias = alias.replace(/[\[\]]/g, "").trim();
+
+          return {
+            id: idx === 0 ? 'start' : idx === allSegs.length - 1 ? 'end' : `mid_${idx}_${Date.now()}`,
+            label: idx === 0 ? '출발지' : idx === allSegs.length - 1 ? '도착지' : '경유지',
+            alias: alias,
+            purpose: purpose,
+            parkingFee: parkingFee,
+            parkingNote: parkingNote,
+            address: address,
+            lat: initialData.waypoints?.[idx]?.lat || 37.5665, 
+            lng: initialData.waypoints?.[idx]?.lng || 126.9780 
+          };
+        }
+        return null;
+      }).filter(Boolean) : null);
+
+    // 2. 최종 waypoint 구성
+    let finalWaypoints = [];
+    const isOriginalValid = Array.isArray(initialData.waypoints) && initialData.waypoints.length >= 2 && initialData.waypoints.every(wp => wp.address && wp.address.toString().trim().length > 0);
+    
+    if (isOriginalValid) {
+      finalWaypoints = initialData.waypoints;
+    } else if (parsedWaypoints && parsedWaypoints.length >= 2) {
+      finalWaypoints = parsedWaypoints;
+    } else {
+      finalWaypoints = [
+        { id: 'start', label: '출발지', address: initialData.departure || '', alias: '출발지', purpose: '출발', lat: initialData.startLat || 37.5665, lng: initialData.startLng || 126.9780, parkingFee: 0, parkingNote: '' },
+        { id: 'end', label: '도착지', address: initialData.destination || '', alias: '도착지', purpose: '업무', lat: initialData.endLat || 37.4979, lng: initialData.endLng || 127.0276, parkingFee: 0, parkingNote: '' }
+      ];
+    }
+
+    // 3. 누락된 필드 최종 보충
+    finalWaypoints = finalWaypoints.map((wp, idx) => {
+      const isStart = idx === 0;
+      const isEnd = idx === finalWaypoints.length - 1;
+      return {
+        ...wp,
+        address: (wp.address || (isStart ? initialData.departure : (isEnd ? initialData.destination : ""))).toString().trim(),
+        alias: (wp.alias || (isStart ? "출발지" : "도착지")).toString().trim(),
+        purpose: (wp.purpose || (isStart ? "출발" : "업무")).toString().trim(),
+        parkingFee: Number(wp.parkingFee) || 0,
+        parkingNote: wp.parkingNote || ""
+      };
+    });
+
+    return {
+      ...initialData,
+      date: initialData.date || new Date().toISOString().split('T')[0],
+      waypoints: finalWaypoints,
+      purpose: initialData.purpose || '',
+      fuelType: initialData.fuelType || profile?.fuelType || 'gasoline',
+      distance: Number(initialData.distance) || 0,
+      isManualDistance: initialData.isManualDistance !== undefined ? initialData.isManualDistance : (initialData.distance > 0 ? true : false)
+    };
+  };
+
   const [favSelectorIdx, setFavSelectorIdx] = useState(null);
   const [favSearch, setFavSearch] = useState('');
 
-  const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
-    waypoints: [
-      { id: 'start', label: '출발지', address: '', alias: '', purpose: '출발', lat: 37.5665, lng: 126.9780, parkingFee: 0, parkingNote: '' },
-      { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
-    ],
-    purpose: '',
-    fuelType: profile?.fuelType || 'gasoline',
-    distance: initialData?.distance || 0, // 최종 주행 거리
-    isManualDistance: initialData ? true : false // 수정 중일 때는 기존 거리를 보존하기 위해 수동 모드로 시작
-  });
+  // key prop 덕분에 component가 mount될 때 이 초기값이 사용됩니다.
+  const [formData, setFormData] = useState(getInitialFormData());
 
-  // 기존 데이터 로드 시 폼 데이터 초기화 로직 강화 (waypoint가 부실할 경우 routeSummary 및 상위 필드들을 적극 활용하여 복구)
+  // 유종 변경 반영 (프로필 설정 변경 시)
   useEffect(() => {
-    if (initialData) {
-      // 1. routeSummary에서 파싱 시도
-      const parsedWaypoints = (initialData.routeSummary ? initialData.routeSummary.split(/\s*[→>▶]\s*|\s-\s/).map((segment, idx, allSegs) => {
-          const outerMatch = segment.trim().match(/^\[(.*)\]\s*(.*)$/);
-          if (outerMatch) {
-            let infoPart = outerMatch[1];
-            let address = outerMatch[2] || "";
-            let purpose = "";
-            let parkingFee = 0;
-            let parkingNote = "";
-
-            const pMatch = infoPart.match(/\[(?:P|🅿️)\s?([\d,]+)(?::\s?([^\]]*))?\]/);
-            if (pMatch) {
-              parkingFee = Number(pMatch[1].replace(/,/g, ''));
-              parkingNote = pMatch[2] || "";
-              infoPart = infoPart.replace(/\[(?:P|🅿️).*?\]|\[(?:P|🅿️).*?$/, "").trim();
-            }
-
-            let alias = infoPart;
-            const purpMatch = alias.match(/\(([^)]+)\)/);
-            if (purpMatch) {
-              purpose = purpMatch[1];
-              alias = alias.replace(/\([^)]+\)/, "").trim();
-            }
-
-            alias = alias.replace(/[\[\]]/g, "").trim();
-
-            return {
-              id: idx === 0 ? 'start' : idx === allSegs.length - 1 ? 'end' : `mid_${idx}_${Date.now()}`,
-              label: idx === 0 ? '출발지' : idx === allSegs.length - 1 ? '도착지' : '경유지',
-              alias: alias,
-              purpose: purpose,
-              parkingFee: parkingFee,
-              parkingNote: parkingNote,
-              address: address,
-              lat: initialData.waypoints?.[idx]?.lat || 37.5665, 
-              lng: initialData.waypoints?.[idx]?.lng || 126.9780 
-            };
-          }
-          return null;
-        }).filter(Boolean) : null);
-
-      // 2. 최종 waypoint 구성 (기존 배열, 파싱된 배열, 기본 상위 필드 순으로 병합)
-      let finalWaypoints = [];
-      
-      // 만약 기존 waypoints가 이미 완벽하다면 그대로 사용
-      const isOriginalValid = Array.isArray(initialData.waypoints) && initialData.waypoints.length >= 2 && initialData.waypoints.every(wp => wp.address);
-      
-      if (isOriginalValid) {
-        finalWaypoints = initialData.waypoints;
-      } else if (parsedWaypoints && parsedWaypoints.length >= 2) {
-        finalWaypoints = parsedWaypoints;
-      } else {
-        // 둘 다 부실하면 상위 필드(departure, destination) 기반으로 최소 2개 생성
-        finalWaypoints = [
-          { id: 'start', label: '출발지', address: initialData.departure || '', alias: '출발지', purpose: '출발', lat: initialData.startLat || 37.5665, lng: initialData.startLng || 126.9780, parkingFee: 0, parkingNote: '' },
-          { id: 'end', label: '도착지', address: initialData.destination || '', alias: '도착지', purpose: '업무', lat: initialData.endLat || 37.4979, lng: initialData.endLng || 127.0276, parkingFee: 0, parkingNote: '' }
-        ];
-      }
-
-      // 3. 누락된 필드 보정 (상위 필드에 데이터가 있는데 waypoint에는 없는 경우 등)
-      finalWaypoints = finalWaypoints.map((wp, idx) => {
-        const isStart = idx === 0;
-        const isEnd = idx === finalWaypoints.length - 1;
-        return {
-          ...wp,
-          address: wp.address || (isStart ? initialData.departure : (isEnd ? initialData.destination : "")),
-          alias: wp.alias || (isStart ? "출발지" : "도착지"),
-          purpose: wp.purpose || (isStart ? "출발" : "업무"),
-          parkingFee: wp.parkingFee || 0
-        };
-      });
-
-      setFormData({
-        ...initialData,
-        date: initialData.date || new Date().toISOString().split('T')[0],
-        waypoints: finalWaypoints,
-        distance: initialData.distance || 0,
-        isManualDistance: initialData.isManualDistance !== undefined ? initialData.isManualDistance : (initialData.distance > 0 ? true : false)
-      });
-    } else if (profile?.fuelType) {
+    if (!initialData && profile?.fuelType) {
       setFormData(prev => ({ ...prev, fuelType: profile.fuelType }));
     }
-  }, [initialData, profile?.fuelType]);
+  }, [profile?.fuelType, initialData]);
 
-  // Haversine 거리 계산 함수 (사용 전 먼저 선언)
+  // Haversine 거리 계산 함수
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371;
     const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -999,19 +1007,16 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
     return fuelCost + totalParking;
   }, [formData.distance, formData.fuelType, fuelRates, formData.waypoints]);
 
-  // 프로필 정보가 변경되거나 로드되면 기본값 적용 및 거리 계산
+  // 거리 자동 계산 효과
   useEffect(() => {
     let sum = 0;
     for (let i = 0; i < formData.waypoints.length - 1; i++) {
         const p1 = formData.waypoints[i];
         const p2 = formData.waypoints[i+1];
         if (p1.address && p2.address) {
-            // 직선 거리에 도로 보정 계수(1.25배) 적용하여 카카오맵과 유사하게 맞춤
             sum += calculateDistance(p1.lat, p1.lng, p2.lat, p2.lng) * 1.25;
         }
     }
-    
-    // 사용자가 직접 수정한 상태가 아닐 때만 자동 계산 결과 적용
     if (!formData.isManualDistance) {
       setFormData(prev => ({ ...prev, distance: parseFloat(sum.toFixed(1)) }));
     }
