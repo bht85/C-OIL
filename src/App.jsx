@@ -140,6 +140,7 @@ const App = () => {
     endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10),
     selectedMonth: new Date().toISOString().slice(0, 7)
   });
+  const [corVehicles, setCorVehicles] = useState([]);
 
   const pdfRef = useRef(null);
 
@@ -183,9 +184,16 @@ const App = () => {
       }
     });
 
+    // 법인차량 목록 동기화
+    const corRef = query(collection(db, 'artifacts', appId, 'public', 'data', 'corporateVehicles'));
+    const unsubscribeCor = onSnapshot(corRef, (snap) => {
+      setCorVehicles(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
     return () => {
       unsubscribe();
       unsubscribeOrg();
+      unsubscribeCor();
     };
   }, [user, profile?.role]);
 
@@ -411,6 +419,14 @@ const App = () => {
         requestReason: null
       };
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId), payload);
+
+      // 법인차량인 경우 해당 차량의 누적 주행거리 업데이트
+      if (logData.isCorporate && logData.vehicleId && logData.odometerEnd) {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'corporateVehicles', logData.vehicleId), {
+          currentOdometer: logData.odometerEnd
+        });
+      }
+
       showStatus(logData.id ? "기록이 수정되었습니다." : "기록이 저장되었습니다.");
       setView('history');
       setEditingLog(null);
@@ -705,10 +721,10 @@ const App = () => {
               </header>
               <main className="max-w-7xl">
                 {view === 'dashboard' && <Dashboard logs={logs} profile={profile} users={allUsers} orgUnits={orgUnits} />}
-                {view === 'log' && <LogEntryForm key={editingLog?.id || 'new'} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} />}
+                {view === 'log' && <LogEntryForm key={editingLog?.id || 'new'} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} corVehicles={corVehicles} />}
                 {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} isAdmin={isAdmin} onRequestCorrection={requestCorrection} onUpdateLog={saveLog} onEdit={(log) => { setEditingLog(log); setView('log'); }} />}
-                {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} />}
-                {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} />}
+                {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} corVehicles={corVehicles} profile={profile} />}
+                {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} />}
                 {view === 'orgchart' && <OrgChartView orgUnits={orgUnits} users={allUsers} db={db} appId={appId} setOrgUnits={setOrgUnits} />}
                 {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} showStatus={showStatus} />}
               </main>
@@ -951,7 +967,7 @@ const EmptyChart = ({ message }) => (
   </div>
 );
 
-const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
+const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVehicles }) => {
   // --- Helper: Robust Data Reconstruction ---
   const getInitialFormData = () => {
     if (!initialData) {
@@ -964,7 +980,12 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
         purpose: '',
         fuelType: profile?.fuelType || 'gasoline',
         distance: 0,
-        isManualDistance: false
+        isManualDistance: false,
+        isCorporate: false,
+        vehicleId: '',
+        odometerStart: 0,
+        odometerEnd: 0,
+        usageType: 'business' // 'business' or 'commute'
       };
     }
 
@@ -1068,7 +1089,12 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
       purpose: initialData.purpose || '',
       fuelType: initialData.fuelType || profile?.fuelType || 'gasoline',
       distance: Number(initialData.distance) || 0,
-      isManualDistance: initialData.isManualDistance !== undefined ? initialData.isManualDistance : (initialData.distance > 0 ? true : false)
+      isManualDistance: initialData.isManualDistance !== undefined ? initialData.isManualDistance : (initialData.distance > 0 ? true : false),
+      isCorporate: initialData.isCorporate || false,
+      vehicleId: initialData.vehicleId || '',
+      odometerStart: initialData.odometerStart || 0,
+      odometerEnd: initialData.odometerEnd || 0,
+      usageType: initialData.usageType || 'business'
     };
   };
 
@@ -1116,10 +1142,30 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
         }
     }
     if (!formData.isManualDistance) {
+      const dist = parseFloat(sum.toFixed(1));
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setFormData(prev => ({ ...prev, distance: parseFloat(sum.toFixed(1)) }));
+      setFormData(prev => ({ 
+        ...prev, 
+        distance: dist,
+        odometerEnd: prev.isCorporate ? (prev.odometerStart + dist) : 0
+      }));
     }
-  }, [formData.waypoints, formData.isManualDistance]);
+  }, [formData.waypoints, formData.isManualDistance, formData.isCorporate, formData.odometerStart]);
+
+  // 법인차량 선택 시 Odometer 시작값 자동 동기화
+  const handleVehicleSelect = (vId) => {
+    const vehicle = corVehicles.find(v => v.id === vId);
+    if (vehicle) {
+      setFormData(prev => ({
+        ...prev,
+        vehicleId: vId,
+        odometerStart: vehicle.currentOdometer || 0,
+        odometerEnd: (vehicle.currentOdometer || 0) + prev.distance
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, vehicleId: '', odometerStart: 0, odometerEnd: 0 }));
+    }
+  };
 
   const isFormValid = useMemo(() => {
     const hasDistance = formData.distance > 0;
@@ -1331,6 +1377,89 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
               </p>
             </div>
           </InputGroup>
+        </div>
+
+        {/* ─── Corporate Vehicle Toggle ─── */}
+        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-xl transition-all ${formData.isCorporate ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                <Car size={18} />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-slate-800 tracking-tight">차량 선택</h4>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select Personal or Corporate</p>
+              </div>
+            </div>
+            <div className="flex bg-white p-1 rounded-xl border border-slate-200">
+               <button 
+                 type="button"
+                 onClick={() => setFormData({...formData, isCorporate: false})}
+                 className={`px-4 py-2 rounded-lg text-[11px] font-black transition-all ${!formData.isCorporate ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+               >
+                 개인차량
+               </button>
+               <button 
+                 type="button"
+                 onClick={() => setFormData({...formData, isCorporate: true})}
+                 className={`px-4 py-2 rounded-lg text-[11px] font-black transition-all ${formData.isCorporate ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+               >
+                 법인차량
+               </button>
+            </div>
+          </div>
+
+          {formData.isCorporate && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-slide-up">
+              <div className="space-y-2">
+                <InputLabel label="법인차량 선택" />
+                <select 
+                  className="w-full px-5 py-3.5 rounded-2xl bg-white border border-slate-200 font-bold outline-none focus:ring-4 focus:ring-indigo-100"
+                  value={formData.vehicleId}
+                  onChange={(e) => handleVehicleSelect(e.target.value)}
+                  required
+                >
+                  <option value="">배정된 차량 선택</option>
+                  {corVehicles.map(v => (
+                    <option key={v.id} value={v.id}>{v.registrationNo} ({v.modelName})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <InputLabel label="운행 용도 (국세청 제출용)" />
+                <div className="flex gap-2">
+                   <button 
+                     type="button"
+                     onClick={() => setFormData({...formData, usageType: 'business'})}
+                     className={`flex-1 py-3.5 rounded-2xl font-black text-xs border transition-all ${formData.usageType === 'business' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-100 text-slate-500'}`}
+                   >
+                     일반 업무용
+                   </button>
+                   <button 
+                     type="button"
+                     onClick={() => setFormData({...formData, usageType: 'commute'})}
+                     className={`flex-1 py-3.5 rounded-2xl font-black text-xs border transition-all ${formData.usageType === 'commute' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-100 text-slate-500'}`}
+                   >
+                     출·퇴근용
+                   </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <InputLabel label="계기판 거리 (km)" />
+                <div className="flex items-center gap-2 font-mono text-sm">
+                   <div className="flex-1 bg-white border border-slate-200 p-3 rounded-2xl text-slate-400 text-center">
+                     <span className="text-[9px] block uppercase font-black text-slate-300 mb-1">Before</span>
+                     {formData.odometerStart.toLocaleString()}
+                   </div>
+                   <ChevronRight className="text-slate-300" size={16} />
+                   <div className="flex-1 bg-white border-2 border-indigo-100 p-3 rounded-2xl text-indigo-600 text-center font-black">
+                     <span className="text-[9px] block uppercase font-black text-indigo-300 mb-1">After</span>
+                     {formData.odometerEnd.toLocaleString()}
+                   </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -2769,7 +2898,7 @@ const InputLabel = ({ label }) => (
   </label>
 );
 
-const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, onRejectRequest, fuelRates, onUpdateSettings }) => {
+const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, onRejectRequest, fuelRates, onUpdateSettings, corVehicles }) => {
   const [users, setUsers] = useState([]);
   const [activeTab, setActiveTab] = useState('users'); // 'users', 'requests', or 'fuel'
 
@@ -2815,6 +2944,12 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, 
           className={`px-8 py-4 rounded-2xl font-black text-sm transition-all flex items-center gap-3 ${activeTab === 'fuel' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
         >
           유류비 단가 관리
+        </button>
+        <button 
+          onClick={() => setActiveTab('corporate')}
+          className={`px-8 py-4 rounded-2xl font-black text-sm transition-all flex items-center gap-3 ${activeTab === 'corporate' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+        >
+          <Car size={16} /> 법인차량 관리
         </button>
       </div>
 
@@ -2882,6 +3017,7 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, 
         </div>
       )}
       {activeTab === 'fuel' && <SettingsPanel fuelRates={fuelRates} onUpdate={onUpdateSettings} db={db} appId={appId} />}
+      {activeTab === 'corporate' && <CorporateVehicleManager corVehicles={corVehicles} users={allUsers} db={db} appId={appId} />}
     </div>
   );
 };
@@ -3239,8 +3375,28 @@ const OrgChartView = ({ orgUnits, users, db, appId, setOrgUnits, onUpdateUser })
   );
 };
 
-const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange }) => {
-  const [activeTab, setActiveTab] = useState('summary'); // 'summary' or 'details'
+const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, corVehicles, profile }) => {
+  const [activeTab, setActiveTab] = useState('summary'); // 'summary', 'details', or 'official'
+  const officialReportRef = useRef(null);
+  const [selectedCarForReport, setSelectedCarForReport] = useState(null);
+
+  const exportOfficialPDF = async (car) => {
+     setSelectedCarForReport(car);
+     // Wait for state update to render the hidden template
+     setTimeout(async () => {
+       if (!officialReportRef.current) return;
+       try {
+         const canvas = await html2canvas(officialReportRef.current, { scale: 2, useCORS: true });
+         const imgData = canvas.toDataURL('image/png');
+         const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+         const pageWidth = pdf.internal.pageSize.getWidth();
+         pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, (canvas.height * pageWidth) / canvas.width);
+         pdf.save(`업무용승용차_운행기록부_${car.registrationNo}_${filters.selectedMonth}.pdf`);
+       } catch (e) {
+         console.error(e);
+       }
+     }, 500);
+  };
 
   // 월 변경 시 시작/종료일 자동 설정
   const handleMonthChange = (month) => {
@@ -3388,6 +3544,12 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange }) =
           className={`px-10 py-4 rounded-2xl font-black text-sm transition-all ${activeTab === 'details' ? 'bg-white text-indigo-600 shadow-md translate-y-0' : 'text-slate-400 hover:text-slate-600 hover:translate-y-[-2px]'}`}
         >
           전체 상세 운행 내역
+        </button>
+        <button 
+          onClick={() => setActiveTab('official')}
+          className={`px-10 py-4 rounded-2xl font-black text-sm transition-all ${activeTab === 'official' ? 'bg-white text-indigo-600 shadow-md translate-y-0' : 'text-slate-400 hover:text-slate-600 hover:translate-y-[-2px]'}`}
+        >
+          <Car size={16} className="inline mr-2" /> 국세청 운행기록부
         </button>
       </div>
 
@@ -3747,6 +3909,229 @@ const ReportPDFTemplate = ({ innerRef, logs, profile, reportFilters, allUsers })
       {/* Footer */}
       <div className="mt-6 pt-4 border-t border-slate-100 text-center">
         <p className="text-[7px] font-bold text-slate-300 uppercase tracking-[0.5em]">Reimbursement Submission Document • C-OIL Smart Fuel Platform</p>
+      </div>
+    </div>
+  );
+};
+
+
+const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
+  const [isAdding, setIsAdding] = useState(false);
+  const [formData, setFormData] = useState({ registrationNo: '', modelName: '', fuelType: 'gasoline', currentOdometer: 0 });
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (corVehicles.length >= 5 && !formData.id) {
+       alert('법인차량은 최대 5대까지만 등록 가능합니다.');
+       return;
+    }
+    const id = formData.id || `cor_${Date.now()}`;
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'corporateVehicles', id), {
+      ...formData,
+      id
+    });
+    setIsAdding(false);
+    setFormData({ registrationNo: '', modelName: '', fuelType: 'gasoline', currentOdometer: 0 });
+  };
+
+  const handleDelete = async (id) => {
+    if (confirm('정말 삭제하시겠습니까?')) {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'corporateVehicles', id));
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl"><Car size={24} /></div>
+          <div>
+            <h3 className="text-xl font-black text-slate-800 tracking-tight">법인차량 관리 센터</h3>
+            <p className="text-xs font-bold text-slate-400 mt-0.5 uppercase tracking-widest">Corporate Fleet Management ({corVehicles.length}/5)</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => { setFormData({ registrationNo: '', modelName: '', fuelType: 'gasoline', currentOdometer: 0 }); setIsAdding(true); }}
+          className="bg-indigo-600 text-white px-6 py-3.5 rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2"
+        >
+          <PlusCircle size={16} /> 신규 차량 등록
+        </button>
+      </div>
+
+      {isAdding && (
+        <div className="premium-card p-10 rounded-[2.5rem] bg-indigo-50/30 border-2 border-indigo-100 animate-slide-up">
+          <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">차량 번호</label>
+              <input 
+                type="text" 
+                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-slate-200 font-bold outline-none focus:ring-4 focus:ring-indigo-100 transition-all"
+                value={formData.registrationNo}
+                onChange={e => setFormData({ ...formData, registrationNo: e.target.value })}
+                placeholder="12가 3456"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">차종/모델</label>
+              <input 
+                type="text" 
+                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-slate-200 font-bold outline-none focus:ring-4 focus:ring-indigo-100 transition-all"
+                value={formData.modelName}
+                onChange={e => setFormData({ ...formData, modelName: e.target.value })}
+                placeholder="그랜저 하이브리드"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">누적 주행거리 (km)</label>
+              <input 
+                type="number" 
+                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-slate-200 font-bold outline-none focus:ring-4 focus:ring-indigo-100 transition-all"
+                value={formData.currentOdometer}
+                onChange={e => setFormData({ ...formData, currentOdometer: parseFloat(e.target.value) })}
+                required
+              />
+            </div>
+            <div className="flex gap-2">
+              <button type="submit" className="flex-1 bg-indigo-600 text-white py-3.5 rounded-2xl font-black text-sm">저장</button>
+              <button type="button" onClick={() => setIsAdding(false)} className="flex-1 bg-slate-200 text-slate-600 py-3.5 rounded-2xl font-black text-sm">취소</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {corVehicles.map(v => (
+          <div key={v.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 hover:shadow-xl transition-all group relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-full translate-x-12 -translate-y-12 group-hover:bg-indigo-100/50 transition-all"></div>
+            <div className="relative z-10">
+              <div className="flex justify-between items-start mb-6">
+                <span className="bg-slate-800 text-white px-3 py-1.5 rounded-xl text-[10px] font-black tracking-widest">{v.registrationNo}</span>
+                <div className="flex gap-1">
+                  <button onClick={() => { setFormData(v); setIsAdding(true); }} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"><Pencil size={14} /></button>
+                  <button onClick={() => handleDelete(v.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
+                </div>
+              </div>
+              <h4 className="text-xl font-black text-slate-800 mb-2">{v.modelName}</h4>
+              <div className="space-y-4 pt-4 border-t border-slate-50">
+                <div className="flex justify-between items-center text-sm font-bold">
+                  <span className="text-slate-400">현재 누적 주행</span>
+                  <span className="text-indigo-600 font-black">{v.currentOdometer?.toLocaleString()} km</span>
+                </div>
+                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-2">
+                   <div className="bg-indigo-500 h-full w-[80%] opacity-20"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {corVehicles.length === 0 && (
+          <div className="col-span-full py-20 bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300">
+            <Car size={48} className="mb-4 opacity-50" />
+            <p className="font-black">등록된 법인차량이 없습니다.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── National Tax Service Style Report Template ───
+const OfficialCorporateLogTemplate = ({ car, logs, year, month, profile, innerRef }) => {
+  const filtered = logs.filter(l => l.isCorporate && l.vehicleId === car.id);
+  const totalKm = filtered.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
+  const businessKm = filtered.filter(l => l.usageType === 'business').reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
+  const commuteKm = filtered.filter(l => l.usageType === 'commute').reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
+
+  return (
+    <div ref={innerRef} style={{ width: '1000px', padding: '60px', backgroundColor: '#ffffff' }} className="font-serif text-slate-900 border-[3px] border-slate-900 mx-auto">
+      <div className="text-[10px] mb-4 flex justify-between">
+        <span>【업무용승용차 운행기록부에 관한 별지 서식】 &lt;2016.4.1. 제정&gt;</span>
+        <span className="border border-slate-900 px-4 py-1">사업자등록번호: {profile?.bizNo || '     -   -     '}</span>
+      </div>
+
+      <h1 className="text-3xl font-bold text-center border-y-2 border-slate-900 py-6 mb-10 tracking-[1em] pl-[1em]">업무용승용차 운행기록부</h1>
+
+      <table className="w-full border-collapse border-2 border-slate-900 mb-8">
+        <tbody>
+          <tr>
+            <td className="w-1/4 h-12 border border-slate-900 bg-slate-50 text-center font-bold text-sm">① 차 종</td>
+            <td className="w-1/4 border border-slate-900 text-center text-sm">{car.modelName}</td>
+            <td className="w-1/4 border border-slate-900 bg-slate-50 text-center font-bold text-sm">② 자동차등록번호</td>
+            <td className="w-1/4 border border-slate-900 text-center text-sm">{car.registrationNo}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 className="text-xl font-bold mb-4">2. 업무용 사용비율 계산</h2>
+      <table className="w-full border-collapse border-2 border-slate-900 text-[11px]">
+        <thead>
+          <tr className="bg-slate-50">
+            <th rowSpan="2" className="border border-slate-900 p-2 w-[80px]">③사용일자</th>
+            <th colSpan="2" className="border border-slate-900 p-2">④ 사용자</th>
+            <th colSpan="3" className="border border-slate-900 p-2">운 행 내 역</th>
+            <th colSpan="2" className="border border-slate-900 p-2">업무용 사용거리(km)</th>
+            <th rowSpan="2" className="border border-slate-900 p-2 w-[100px]">⑩ 비고</th>
+          </tr>
+          <tr className="bg-slate-50">
+            <th className="border border-slate-900 p-2">부 서</th>
+            <th className="border border-slate-900 p-2">성 명</th>
+            <th className="border border-slate-900 p-2 font-normal text-[9px]">⑤ 주행 전<br/>계기판 거리(km)</th>
+            <th className="border border-slate-900 p-2 font-normal text-[9px]">⑥ 주행 후<br/>계기판 거리(km)</th>
+            <th className="border border-slate-900 p-2 font-normal text-[10px]">⑦ 주행거리(km)</th>
+            <th className="border border-slate-900 p-2">⑧ 출·퇴근용(km)</th>
+            <th className="border border-slate-900 p-2">⑨ 일반 업무용(km)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map((log, idx) => (
+            <tr key={log.id} className="text-center h-10">
+              <td className="border border-slate-900">{log.date}</td>
+              <td className="border border-slate-900">{log.department || '-'}</td>
+              <td className="border border-slate-900 font-bold">{log.userName}</td>
+              <td className="border border-slate-900 font-mono text-slate-500">{(log.odometerStart || 0).toLocaleString()}</td>
+              <td className="border border-slate-900 font-mono">{(log.odometerEnd || 0).toLocaleString()}</td>
+              <td className="border border-slate-900 font-bold italic">{(log.distance || 0).toFixed(1)}</td>
+              <td className="border border-slate-900">{log.usageType === 'commute' ? log.distance : ''}</td>
+              <td className="border border-slate-900">{log.usageType === 'business' ? log.distance : ''}</td>
+              <td className="border border-slate-900 text-left px-2 text-[9px] truncate">{log.purpose}</td>
+            </tr>
+          ))}
+          {/* 빈 칸 채우기 (최소 10줄 유지) */}
+          {Array.from({ length: Math.max(0, 15 - filtered.length) }).map((_, i) => (
+            <tr key={`empty-${i}`} className="h-10 text-slate-200">
+               <td className="border border-slate-900 text-center text-[10px]">·</td>
+               <td className="border border-slate-900"></td>
+               <td className="border border-slate-900"></td>
+               <td className="border border-slate-900"></td>
+               <td className="border border-slate-900"></td>
+               <td className="border border-slate-900"></td>
+               <td className="border border-slate-900"></td>
+               <td className="border border-slate-900"></td>
+               <td className="border border-slate-900"></td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="bg-slate-50 font-bold h-12 text-center">
+            <td colSpan="3" className="border border-slate-900">과세기간 합계</td>
+            <td className="border border-slate-900 bg-slate-200" colSpan="2">⑪ 과세기간 총주행거리(km)</td>
+            <td className="border border-slate-900 text-lg underline">{totalKm.toLocaleString()}</td>
+            <td colSpan="2" className="border border-slate-900">⑫ 과세기간 업무용 사용거리(km)</td>
+            <td className="border border-slate-900 text-lg underline">{(businessKm + commuteKm).toLocaleString()}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div className="flex justify-end gap-12 mt-10 font-bold text-lg">
+         <div className="flex flex-col items-center">
+            <span className="text-[12px] text-slate-400 mb-2">업무사용비율</span>
+            <span className="text-2xl">{totalKm > 0 ? ((businessKm + commuteKm) / totalKm * 100).toFixed(1) : 0}%</span>
+         </div>
+         <div className="flex items-end pb-2">
+            본 기록은 C-OIL 시스템에 의해 전자적으로 생성되었습니다. (서명날인 생략)
+         </div>
       </div>
     </div>
   );
