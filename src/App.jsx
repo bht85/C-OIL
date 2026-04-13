@@ -3915,7 +3915,7 @@ const ReportPDFTemplate = ({ innerRef, logs, profile, reportFilters, allUsers })
 
 const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
   const [isAdding, setIsAdding] = useState(false);
-  const [formData, setFormData] = useState({ registrationNo: '', modelName: '', fuelType: 'gasoline', currentOdometer: 0, assignedUser: '' });
+  const [formData, setFormData] = useState({ registrationNo: '', modelName: '', fuelType: 'gasoline', initialOdometer: 0, currentOdometer: 0, assignedUser: '' });
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -3926,10 +3926,11 @@ const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
     const id = formData.id || `cor_${Date.now()}`;
     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'corporateVehicles', id), {
       ...formData,
+      currentOdometer: formData.currentOdometer || formData.initialOdometer, // 초기값 설정 시 성조 수치도 동일하게
       id
     });
     setIsAdding(false);
-    setFormData({ registrationNo: '', modelName: '', fuelType: 'gasoline', currentOdometer: 0, assignedUser: '' });
+    setFormData({ registrationNo: '', modelName: '', fuelType: 'gasoline', initialOdometer: 0, currentOdometer: 0, assignedUser: '' });
   };
 
   const handleDelete = async (id) => {
@@ -3949,7 +3950,7 @@ const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
           </div>
         </div>
         <button 
-          onClick={() => { setFormData({ registrationNo: '', modelName: '', fuelType: 'gasoline', currentOdometer: 0 }); setIsAdding(true); }}
+          onClick={() => { setFormData({ registrationNo: '', modelName: '', fuelType: 'gasoline', initialOdometer: 0, currentOdometer: 0 }); setIsAdding(true); }}
           className="bg-indigo-600 text-white px-6 py-3.5 rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2"
         >
           <PlusCircle size={16} /> 신규 차량 등록
@@ -3958,7 +3959,7 @@ const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
 
       {isAdding && (
         <div className="premium-card p-10 rounded-[2.5rem] bg-indigo-50/30 border-2 border-indigo-100 animate-slide-up">
-          <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-5 gap-6 items-end">
+          <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-6 gap-6 items-end">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">차량 번호</label>
               <input 
@@ -3982,12 +3983,26 @@ const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">누적 주행거리 (km)</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">기초 주행거리 (KM)</label>
               <input 
                 type="number" 
+                step="0.1"
                 className="w-full px-5 py-3.5 rounded-2xl bg-white border border-slate-200 font-bold outline-none focus:ring-4 focus:ring-indigo-100 transition-all"
+                value={formData.initialOdometer}
+                onChange={e => setFormData({ ...formData, initialOdometer: parseFloat(parseFloat(e.target.value).toFixed(1)) || 0 })}
+                placeholder="연초 고정 수치"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest ml-1">현재 누적 주행 (KM)</label>
+              <input 
+                type="number" 
+                step="0.1"
+                className="w-full px-5 py-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-100 font-bold outline-none focus:ring-4 focus:ring-indigo-100 transition-all"
                 value={formData.currentOdometer}
-                onChange={e => setFormData({ ...formData, currentOdometer: parseFloat(e.target.value) })}
+                onChange={e => setFormData({ ...formData, currentOdometer: parseFloat(parseFloat(e.target.value).toFixed(1)) || 0 })}
+                placeholder="현재 실시간 수치"
                 required
               />
             </div>
@@ -4031,13 +4046,14 @@ const CorporateVehicleManager = ({ corVehicles, users, db, appId }) => {
                     {users.find(u => u.uid === v.assignedUser)?.userName || '공용 차량'}
                  </div>
               </div>
-              <div className="space-y-4 pt-4 border-t border-slate-50">
-                <div className="flex justify-between items-center text-sm font-bold">
-                  <span className="text-slate-400">현재 누적 주행</span>
-                  <span className="text-indigo-600 font-black">{v.currentOdometer?.toLocaleString()} km</span>
+              <div className="space-y-3 pt-4 border-t border-slate-50">
+                <div className="flex justify-between items-center text-[10px] font-bold">
+                  <span className="text-slate-400 uppercase tracking-tighter">기초(Reference)</span>
+                  <span className="text-slate-600 font-black">{v.initialOdometer?.toLocaleString()} km</span>
                 </div>
-                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-2">
-                   <div className="bg-indigo-500 h-full w-[80%] opacity-20"></div>
+                <div className="flex justify-between items-center text-sm font-bold">
+                  <span className="text-slate-800">현재 누적 주행</span>
+                  <span className="text-indigo-600 font-black">{v.currentOdometer?.toLocaleString()} km</span>
                 </div>
               </div>
             </div>
