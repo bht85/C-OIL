@@ -894,56 +894,79 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
       };
     }
 
-    // 1. routeSummary에서 파싱 시도 (가장 최신의 텍스트 정보가 담겨있는 필드)
-    const parsedWaypoints = (initialData.routeSummary ? initialData.routeSummary.split(/\s*[→>▶]\s*|\s{2,}/).map((segment, idx, allSegs) => {
-        const outerMatch = segment.trim().match(/^\[(.*)\]\s*(.*)$/);
-        if (outerMatch) {
-          let infoPart = outerMatch[1];
-          let address = outerMatch[2] || "";
-          let purpose = "";
-          let parkingFee = 0;
-          let parkingNote = "";
+    // 1. routeSummary에서 파싱 시도
+    // 디버그: 실제 저장된 데이터 구조 확인
+    console.log('[LogEntryForm] initialData:', JSON.stringify({
+      routeSummary: initialData.routeSummary,
+      waypoints: initialData.waypoints,
+      departure: initialData.departure,
+      destination: initialData.destination
+    }, null, 2));
 
-          const pMatch = infoPart.match(/\[(?:P|🅿️)\s?([\d,]+)(?::\s?([^\]]*))?\]/);
-          if (pMatch) {
-            parkingFee = Number(pMatch[1].replace(/,/g, ''));
-            parkingNote = pMatch[2] || "";
-            infoPart = infoPart.replace(/\[(?:P|🅿️).*?\]|\[(?:P|🅿️).*?$/, "").trim();
-          }
+    // ⚠️ 핵심 수정: → 만을 기준으로 분리 (공백 기준 split 제거 - 주소 안 공백과 충돌)
+    // ⚠️ Greedy regex 버그 수정: 가장 바깥 대괄호 쌍을 non-greedy하게 찾아야 함
+    const parsedWaypoints = (initialData.routeSummary ? initialData.routeSummary
+      .split(' → ')
+      .map((segment, idx, allSegs) => {
+        const trimmed = segment.trim();
+        // 형식: [alias (purpose) [🅿️fee: note]] address
+        // 마지막 ] 이후가 address이므로, 마지막 `] ` 위치를 기준으로 분리
+        const lastBracketEnd = trimmed.lastIndexOf('] ');
+        if (lastBracketEnd === -1) return null;
 
-          let alias = infoPart;
-          const purpMatch = alias.match(/\(([^)]+)\)/);
-          if (purpMatch) {
-            purpose = purpMatch[1];
-            alias = alias.replace(/\([^)]+\)/, "").trim();
-          }
+        const address = trimmed.slice(lastBracketEnd + 2).trim();
+        let infoPart = trimmed.slice(1, lastBracketEnd); // 첫 번째 [ 이후, 마지막 ] 이전
 
-          alias = alias.replace(/[\[\]]/g, "").trim();
+        let purpose = '';
+        let parkingFee = 0;
+        let parkingNote = '';
 
-          return {
-            id: idx === 0 ? 'start' : idx === allSegs.length - 1 ? 'end' : `mid_${idx}_${Date.now()}`,
-            label: idx === 0 ? '출발지' : idx === allSegs.length - 1 ? '도착지' : '경유지',
-            alias: alias,
-            purpose: purpose,
-            parkingFee: parkingFee,
-            parkingNote: parkingNote,
-            address: address,
-            lat: initialData.waypoints?.[idx]?.lat || 37.5665, 
-            lng: initialData.waypoints?.[idx]?.lng || 126.9780 
-          };
+        // 주차비 추출: [🅿️숫자] 또는 [🅿️숫자: 메모] 패턴
+        const pMatch = infoPart.match(/\s*\[(?:🅿️|P)\s*([\d,]+)(?:\s*:\s*([^\]]*))?\]/);
+        if (pMatch) {
+          parkingFee = Number(pMatch[1].replace(/,/g, ''));
+          parkingNote = (pMatch[2] || '').trim();
+          infoPart = infoPart.replace(/\s*\[(?:🅿️|P).*?\]/, '').trim();
         }
-        return null;
+
+        // 방문 목적 추출: (목적) 패턴
+        let alias = infoPart;
+        const purpMatch = alias.match(/\(([^)]+)\)\s*$/);
+        if (purpMatch) {
+          purpose = purpMatch[1].trim();
+          alias = alias.replace(/\s*\([^)]+\)\s*$/, '').trim();
+        }
+
+        if (!address) return null;
+
+        return {
+          id: idx === 0 ? 'start' : idx === allSegs.length - 1 ? 'end' : `mid_${idx}_${Date.now()}`,
+          label: idx === 0 ? '출발지' : idx === allSegs.length - 1 ? '도착지' : '경유지',
+          alias: alias || (idx === 0 ? '출발지' : '도착지'),
+          purpose: purpose || (idx === 0 ? '출발' : '업무'),
+          parkingFee: parkingFee,
+          parkingNote: parkingNote,
+          address: address,
+          lat: initialData.waypoints?.[idx]?.lat || 37.5665,
+          lng: initialData.waypoints?.[idx]?.lng || 126.9780
+        };
       }).filter(Boolean) : null);
 
+    console.log('[LogEntryForm] parsedWaypoints:', parsedWaypoints);
+
     // 2. 최종 waypoint 구성
+    // ⚠️ 중요: routeSummary를 항상 우선 사용 (DB의 waypoints 염에 잘못된 데이터가 있을 수 있음)
+    // waypoints 배열은 lat/lng 좌표 가져오는 용도로만 사용
     let finalWaypoints = [];
-    const isOriginalValid = Array.isArray(initialData.waypoints) && initialData.waypoints.length >= 2 && initialData.waypoints.every(wp => wp.address && wp.address.toString().trim().length > 0);
-    
-    if (isOriginalValid) {
-      finalWaypoints = initialData.waypoints;
-    } else if (parsedWaypoints && parsedWaypoints.length >= 2) {
+
+    // 맨 먼저 routeSummary 파싱이 성공페스면 귽사담에 사용
+    if (parsedWaypoints && parsedWaypoints.length >= 2) {
       finalWaypoints = parsedWaypoints;
+    } else if (Array.isArray(initialData.waypoints) && initialData.waypoints.length >= 2) {
+      // routeSummary 파싱 실패 시에만 waypoints 배열 사용
+      finalWaypoints = initialData.waypoints;
     } else {
+      // 둘 다 없으면 상위 필드 기반으로 생성
       finalWaypoints = [
         { id: 'start', label: '출발지', address: initialData.departure || '', alias: '출발지', purpose: '출발', lat: initialData.startLat || 37.5665, lng: initialData.startLng || 126.9780, parkingFee: 0, parkingNote: '' },
         { id: 'end', label: '도착지', address: initialData.destination || '', alias: '도착지', purpose: '업무', lat: initialData.endLat || 37.4979, lng: initialData.endLng || 127.0276, parkingFee: 0, parkingNote: '' }
