@@ -893,16 +893,11 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
     isManualDistance: initialData ? true : false // 수정 중일 때는 기존 거리를 보존하기 위해 수동 모드로 시작
   });
 
-  // 기존 데이터 로드 시 폼 데이터 초기화 로직 강화 (waypoint가 부실할 경우 routeSummary를 우선 파싱)
+  // 기존 데이터 로드 시 폼 데이터 초기화 로직 강화 (waypoint가 부실할 경우 routeSummary 및 상위 필드들을 적극 활용하여 복구)
   useEffect(() => {
     if (initialData) {
-      // 데이터 안정성 검사: waypoints 배열이 있고 각 항목에 주소가 있는지 확인
-      const isWaypointsComplete = Array.isArray(initialData.waypoints) && 
-                                   initialData.waypoints.length >= 2 && 
-                                   initialData.waypoints.every(wp => wp.address && wp.address.trim().length > 0);
-
+      // 1. routeSummary에서 파싱 시도
       const parsedWaypoints = (initialData.routeSummary ? initialData.routeSummary.split(/\s*[→>▶]\s*|\s-\s/).map((segment, idx, allSegs) => {
-          // 더욱 유연한 정규식으로 주소와 정보부 분리 (비워져 있는 것 방지)
           const outerMatch = segment.trim().match(/^\[(.*)\]\s*(.*)$/);
           if (outerMatch) {
             let infoPart = outerMatch[1];
@@ -911,7 +906,6 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
             let parkingFee = 0;
             let parkingNote = "";
 
-            // 1. 주차비 정보 추출 (P 또는 🅿️ 아이콘 대응 및 유연한 형식)
             const pMatch = infoPart.match(/\[(?:P|🅿️)\s?([\d,]+)(?::\s?([^\]]*))?\]/);
             if (pMatch) {
               parkingFee = Number(pMatch[1].replace(/,/g, ''));
@@ -919,7 +913,6 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
               infoPart = infoPart.replace(/\[(?:P|🅿️).*?\]|\[(?:P|🅿️).*?$/, "").trim();
             }
 
-            // 2. 방문 목적 추출 (괄호 안의 내용)
             let alias = infoPart;
             const purpMatch = alias.match(/\(([^)]+)\)/);
             if (purpMatch) {
@@ -927,18 +920,16 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
               alias = alias.replace(/\([^)]+\)/, "").trim();
             }
 
-            // 3. 나머지 대괄호 제거하여 순수 별칭 추출
             alias = alias.replace(/[\[\]]/g, "").trim();
 
             return {
               id: idx === 0 ? 'start' : idx === allSegs.length - 1 ? 'end' : `mid_${idx}_${Date.now()}`,
               label: idx === 0 ? '출발지' : idx === allSegs.length - 1 ? '도착지' : '경유지',
-              alias: alias || (idx === 0 ? '출발지' : '도착지'),
-              purpose: purpose || (idx === 0 ? '출발' : '업무'),
+              alias: alias,
+              purpose: purpose,
               parkingFee: parkingFee,
               parkingNote: parkingNote,
               address: address,
-              // 좌표 정보가 있다면 유지, 없다면 기본값
               lat: initialData.waypoints?.[idx]?.lat || 37.5665, 
               lng: initialData.waypoints?.[idx]?.lng || 126.9780 
             };
@@ -946,13 +937,41 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
           return null;
         }).filter(Boolean) : null);
 
+      // 2. 최종 waypoint 구성 (기존 배열, 파싱된 배열, 기본 상위 필드 순으로 병합)
+      let finalWaypoints = [];
+      
+      // 만약 기존 waypoints가 이미 완벽하다면 그대로 사용
+      const isOriginalValid = Array.isArray(initialData.waypoints) && initialData.waypoints.length >= 2 && initialData.waypoints.every(wp => wp.address);
+      
+      if (isOriginalValid) {
+        finalWaypoints = initialData.waypoints;
+      } else if (parsedWaypoints && parsedWaypoints.length >= 2) {
+        finalWaypoints = parsedWaypoints;
+      } else {
+        // 둘 다 부실하면 상위 필드(departure, destination) 기반으로 최소 2개 생성
+        finalWaypoints = [
+          { id: 'start', label: '출발지', address: initialData.departure || '', alias: '출발지', purpose: '출발', lat: initialData.startLat || 37.5665, lng: initialData.startLng || 126.9780, parkingFee: 0, parkingNote: '' },
+          { id: 'end', label: '도착지', address: initialData.destination || '', alias: '도착지', purpose: '업무', lat: initialData.endLat || 37.4979, lng: initialData.endLng || 127.0276, parkingFee: 0, parkingNote: '' }
+        ];
+      }
+
+      // 3. 누락된 필드 보정 (상위 필드에 데이터가 있는데 waypoint에는 없는 경우 등)
+      finalWaypoints = finalWaypoints.map((wp, idx) => {
+        const isStart = idx === 0;
+        const isEnd = idx === finalWaypoints.length - 1;
+        return {
+          ...wp,
+          address: wp.address || (isStart ? initialData.departure : (isEnd ? initialData.destination : "")),
+          alias: wp.alias || (isStart ? "출발지" : "도착지"),
+          purpose: wp.purpose || (isStart ? "출발" : "업무"),
+          parkingFee: wp.parkingFee || 0
+        };
+      });
+
       setFormData({
         ...initialData,
         date: initialData.date || new Date().toISOString().split('T')[0],
-        waypoints: (isWaypointsComplete ? initialData.waypoints : (parsedWaypoints && parsedWaypoints.length >= 2 ? parsedWaypoints : null)) || [
-          { id: 'start', label: '출발지', address: initialData.departure || '', alias: '출발지', purpose: '출발', lat: initialData.startLat || 37.5665, lng: initialData.startLng || 126.9780, parkingFee: 0, parkingNote: '' },
-          { id: 'end', label: '도착지', address: initialData.destination || '', alias: '도착지', purpose: '업무', lat: initialData.endLat || 37.4979, lng: initialData.endLng || 127.0276, parkingFee: 0, parkingNote: '' }
-        ],
+        waypoints: finalWaypoints,
         distance: initialData.distance || 0,
         isManualDistance: initialData.isManualDistance !== undefined ? initialData.isManualDistance : (initialData.distance > 0 ? true : false)
       });
