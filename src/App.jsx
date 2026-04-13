@@ -643,33 +643,37 @@ const App = () => {
   };
 
   const isAdmin = profile?.role === 'admin' || isMasterAdmin(user?.email); 
+  const viewTitle = view === 'dashboard' ? '대시보드' : view === 'log' ? (editingLog ? '운행 수정' : '신규 운행') : view === 'history' ? '정산 내역' : view === 'reports' ? '통계 리포트' : view === 'admin' ? '인사 관리' : view === 'orgchart' ? '조직도' : '내 프로필';
+
   return (
     <>
       {statusMessage && (
-        <div className={`fixed top-12 left-1/2 -translate-x-1/2 z-[1000] px-8 py-5 rounded-[2rem] shadow-2xl border-2 animate-slide-up flex items-center gap-4 min-w-[320px] max-w-[90vw] ${
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[1000] px-5 py-4 rounded-2xl shadow-2xl border animate-slide-up flex items-center gap-3 min-w-[280px] max-w-[92vw] ${
           statusMessage.type === 'error' 
             ? 'bg-red-50 text-red-700 border-red-100' 
             : statusMessage.type === 'info'
             ? 'bg-blue-50 text-blue-700 border-blue-100'
             : 'bg-green-50 text-green-700 border-green-100'
         }`}>
-          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
-            statusMessage.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+            statusMessage.type === 'error' ? 'bg-red-500 text-white' : statusMessage.type === 'info' ? 'bg-blue-500 text-white' : 'bg-green-500 text-white'
           }`}>
-            {statusMessage.type === 'error' ? <AlertCircle size={24} /> : <FileText size={24} />}
+            {statusMessage.type === 'error' ? <AlertCircle size={18} /> : <FileText size={18} />}
           </div>
-          <div className="flex-1">
-            <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-0.5">System Alert</p>
-            <span className="font-black text-sm block leading-tight">{statusMessage.msg}</span>
-          </div>
-          <button onClick={() => setStatusMessage(null)} className="p-2 hover:bg-black/5 rounded-xl transition-all">
-            <X size={18} />
+          <span className="font-bold text-sm flex-1 leading-tight">{statusMessage.msg}</span>
+          <button onClick={() => setStatusMessage(null)} className="p-1.5 hover:bg-black/5 rounded-lg transition-all shrink-0">
+            <X size={16} />
           </button>
         </div>
       )}
 
       {loading ? (
-        <div className="h-screen flex items-center justify-center font-black text-slate-300">SYSTEM LOADING...</div>
+        <div className="h-screen flex flex-col items-center justify-center gap-4">
+          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-200 animate-pulse">
+            <Car size={24} strokeWidth={3} />
+          </div>
+          <p className="font-black text-slate-300 text-sm tracking-widest">LOADING...</p>
+        </div>
       ) : authAction === 'resetPassword' ? (
         <PasswordResetView code={resetCode} onComplete={() => { setAuthAction(null); window.history.replaceState({}, document.title, window.location.pathname); }} />
       ) : !user ? (
@@ -687,20 +691,50 @@ const App = () => {
             setEditingLog={setEditingLog}
             pendingRequestsCount={logs.filter(log => log.requestStatus === 'pending').length}
           />
-          <div className={`flex-1 transition-all duration-500 ease-in-out ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-72'} min-h-screen`}>
-            <div className="p-6 lg:p-10 max-w-7xl mx-auto">
+          <div className={`flex-1 transition-all duration-500 ease-in-out ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-72'} min-h-screen flex flex-col`}>
+            {/* Mobile TopBar */}
+            <div className="lg:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center justify-between px-4 h-14 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-indigo-200">
+                  <Car size={16} strokeWidth={3} />
+                </div>
+                <div>
+                  <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest leading-none">C-OIL</p>
+                  <h2 className="text-base font-black text-slate-900 leading-tight">{viewTitle}</h2>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {(view === 'history' || view === 'reports') && (
+                  <button
+                    onClick={exportPDF}
+                    className="flex items-center gap-1.5 bg-indigo-600 px-3 py-2 rounded-xl text-white font-bold text-xs shadow-md shadow-indigo-100 active:scale-95 transition-all"
+                  >
+                    <FileText size={14} />
+                    PDF
+                  </button>
+                )}
+                <button
+                  onClick={() => setView('profile')}
+                  className="relative w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center text-white font-black text-sm shadow-md"
+                >
+                  {profile?.userName?.[0] || 'U'}
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
+                </button>
+              </div>
+            </div>
+
+            {/* Desktop Header */}
+            <div className="hidden lg:block p-10 pb-0">
               <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10 animate-fade-in">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="h-px w-8 bg-indigo-500 rounded-full"></span>
                     <span className="text-[11px] font-black text-indigo-500 uppercase tracking-[0.3em]">SYSTEM › {view.toUpperCase()}</span>
                   </div>
-                  <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-                    {view === 'dashboard' ? '대시보드' : view === 'log' ? (editingLog ? '운행 내역 수정' : '신규 운행 내역') : view === 'history' ? '정산 및 내역' : view === 'reports' ? '통계 리포트' : view === 'admin' ? '인사 관리' : view === 'orgchart' ? '조직도 안내' : '내 프로필'}
-                  </h1>
+                  <h1 className="text-4xl font-black text-slate-900 tracking-tight">{viewTitle}</h1>
                 </div>
                 <div className="flex items-center gap-3">
-                   {(view === 'history' || view === 'reports') && (
+                  {(view === 'history' || view === 'reports') && (
                     <div className="flex items-center gap-2">
                       <button 
                         onClick={exportPDF}
@@ -720,6 +754,9 @@ const App = () => {
                   )}
                 </div>
               </header>
+            </div>
+
+            <div className="flex-1 px-4 py-4 lg:px-10 lg:py-0 lg:pb-10 max-w-7xl w-full mx-auto pb-24">
               <main className="max-w-7xl">
                 {view === 'dashboard' && <Dashboard logs={logs} profile={profile} users={allUsers} orgUnits={orgUnits} />}
                 {view === 'log' && <LogEntryForm key={editingLog?.id || 'new'} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} corVehicles={corVehicles} />}
@@ -1230,8 +1267,6 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
   };
 
   const handleQuickSelect = (index, location) => {
-    // 저장된 장소가 이미 좌표를 가지고 있더라도, 정확도를 위해 다시 한번 지오코딩을 수행하는 것이 안전함
-    // 특히 기존에 잘못 저장된(더미) 좌표가 있을 수 있으므로 주소를 기반으로 새로 검색함
     if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
       const geocoder = new window.kakao.maps.services.Geocoder();
       geocoder.addressSearch(location.address, (result, status) => {
@@ -1246,7 +1281,6 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
           };
           setFormData(prev => ({ ...prev, waypoints: newWaypoints }));
         } else {
-          // 실패 시 기존 정보라도 활용
           applyQuickSelectDirectly(index, location);
         }
       });
@@ -1306,7 +1340,6 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
     e.preventDefault();
     if (!isFormValid) return;
     
-    // 이력 저장을 위해 보낼 데이터 가공 (별칭 포함)
     const payload = {
       ...formData,
       date: formData.date,
@@ -1344,138 +1377,171 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
   };
 
   return (
-    <div className="bg-white p-5 sm:p-10 rounded-3xl sm:rounded-[2.5rem] shadow-sm border border-slate-100">
-      <form onSubmit={handleSubmit} className="space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10">
-          <InputGroup label="운행 날짜" icon={<History size={16}/>}>
-            <input 
-              type="date" 
-              className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-bold text-slate-700" 
-              value={formData.date}
-              min={(() => {
-                if (isAdmin || initialData) return undefined;
-                const d = new Date();
-                d.setDate(d.getDate() - 1);
-                return d.toISOString().split('T')[0];
-              })()}
-              max={(() => {
-                if (isAdmin || initialData) return undefined;
-                return new Date().toISOString().split('T')[0];
-              })()}
-              onChange={e => setFormData({...formData, date: e.target.value})}
-            />
-          </InputGroup>
+    <div className="bg-white rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+      <form onSubmit={handleSubmit} className="divide-y divide-slate-50">
+        {/* Section 1: 기본 정보 */}
+        <div className="p-5 sm:p-10 space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <InputGroup label="운행 날짜" icon={<History size={16}/>}>
+              <input 
+                type="date" 
+                className="w-full px-4 py-3.5 rounded-xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-bold text-slate-700 text-base" 
+                value={formData.date}
+                min={(() => {
+                  if (isAdmin || initialData) return undefined;
+                  const d = new Date();
+                  d.setDate(d.getDate() - 1);
+                  return d.toISOString().split('T')[0];
+                })()}
+                max={(() => {
+                  if (isAdmin || initialData) return undefined;
+                  return new Date().toISOString().split('T')[0];
+                })()}
+                onChange={e => setFormData({...formData, date: e.target.value})}
+              />
+            </InputGroup>
 
-          <InputGroup label="사용 유종" icon={<Fuel size={16}/>}>
-            <div className="relative group">
-              <div className="w-full px-5 py-4 rounded-2xl bg-slate-100/50 border border-slate-200 font-bold text-slate-600 flex flex-wrap items-center justify-between shadow-inner gap-2">
-                <span className="flex items-center gap-2 text-sm sm:text-base">
-                  <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
-                  {formData.fuelType === 'gasoline' ? '휘발유' : formData.fuelType === 'diesel' ? '경유' : 'LPG'} 
-                  <span className="text-indigo-500 ml-1 text-xs sm:text-sm">({Number(fuelRates?.[formData.fuelType]?.unitPrice || 0).toFixed(1)}원/km)</span>
-                </span>
+            <InputGroup label="사용 유종" icon={<Fuel size={16}/>}>
+              <div className="relative group">
+                <div className="w-full px-4 py-3.5 rounded-xl bg-slate-100/60 border border-slate-200 font-bold text-slate-600 flex items-center justify-between shadow-inner">
+                  <span className="flex items-center gap-2 text-sm">
+                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                    {formData.fuelType === 'gasoline' ? '휘발유' : formData.fuelType === 'diesel' ? '경유' : 'LPG'} 
+                    <span className="text-indigo-500 text-xs">({Number(fuelRates?.[formData.fuelType]?.unitPrice || 0).toFixed(1)}원/km)</span>
+                  </span>
+                </div>
+                <p className="mt-2 px-1 text-[10px] font-black text-slate-400 italic">
+                  ※ 유종 변경은 <span className="text-indigo-500 underline underline-offset-2">'내 정보'</span> 메뉴에서 가능합니다.
+                </p>
               </div>
-              <p className="mt-2.5 px-1 text-[9px] sm:text-[10px] font-black text-slate-400 italic">
-                ※ 유종 변경은 <span className="text-indigo-500 underline underline-offset-2">'내 정보'</span> 메뉴에서 가능합니다.
-              </p>
-            </div>
-          </InputGroup>
+            </InputGroup>
+          </div>
         </div>
 
-
-        <div className="space-y-4">
-          <div className="flex justify-between items-center px-1">
-             <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-               <MapPin size={16} className="text-blue-500" /> 운행 경로 및 장소명 (필수)
-             </label>
-             <button 
-               type="button"
-               onClick={addStop}
-               className="text-[10px] font-black bg-slate-100 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded-lg transition-all text-slate-500"
-             >
-               + 경유지 추가
-             </button>
+        {/* Section 2: 운행 경로 */}
+        <div className="p-5 sm:p-10 space-y-4">
+          <div className="flex justify-between items-center">
+            <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <MapPin size={15} className="text-blue-500" /> 운행 경로
+            </label>
+            <button 
+              type="button"
+              onClick={addStop}
+              className="flex items-center gap-1.5 text-xs font-black bg-blue-600 text-white px-3 py-2 rounded-xl transition-all active:scale-95 shadow-md shadow-blue-100"
+            >
+              <PlusCircle size={14} /> 경유지 추가
+            </button>
           </div>
           
-          <div className="space-y-4">
+          <div className="space-y-3">
             {formData.waypoints.map((wp, idx) => (
-              <div key={wp.id} className="animate-fade-in group space-y-2">
-                <div className="flex flex-wrap gap-2 ml-1">
-                  {profile?.homeAddress && (
-                    <button 
-                      type="button" 
-                      onClick={() => handleQuickSelect(idx, { name: profile.homeAlias || '우리집', address: profile.homeAddress, lat: profile.homeLat, lng: profile.homeLng })}
-                      className="group/btn flex items-center gap-1.5 px-4 py-2 rounded-full bg-indigo-600 text-white text-[11px] font-black shadow-lg shadow-indigo-100/50 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all"
-                    >
-                      <span className="opacity-80">🏠</span>
-                      <span>{profile.homeAlias || '우리집'}</span>
-                    </button>
-                  )}
-                  {profile?.savedLocations?.length > 0 && (
-                    <button 
-                      type="button" 
-                      onClick={() => setFavSelectorIdx(idx)}
-                      className="group/btn flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-50 border border-slate-100 text-slate-500 text-[11px] font-black hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all border-dashed"
-                    >
-                      <Star size={12} className={favSelectorIdx === idx ? 'fill-indigo-500 text-indigo-500' : ''} />
-                      <span>즐겨찾기 선택</span>
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-slate-50/50 p-4 sm:p-0 rounded-2xl sm:bg-transparent">
-                  <div className="w-full sm:flex-[2] relative">
-                    <input 
-                      type="text" 
-                      placeholder={`${wp.label} 주소 검색`} 
-                      readOnly
+              <div key={wp.id} className="animate-fade-in">
+                {/* 웨이포인트 카드 */}
+                <div className={`rounded-2xl border-2 p-4 space-y-3 transition-all ${
+                  idx === 0 ? 'border-blue-100 bg-blue-50/30' :
+                  idx === formData.waypoints.length - 1 ? 'border-indigo-100 bg-indigo-50/20' :
+                  'border-slate-100 bg-slate-50/30'
+                }`}>
+                  {/* 카드 헤더 */}
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg ${
+                      idx === 0 ? 'bg-blue-500 text-white' :
+                      idx === formData.waypoints.length - 1 ? 'bg-indigo-600 text-white' :
+                      'bg-slate-200 text-slate-600'
+                    }`}>
+                      {wp.label || `경유지 ${idx}`}
+                    </span>
+                    {idx > 0 && idx < formData.waypoints.length - 1 && (
+                      <button 
+                        type="button" 
+                        onClick={() => removeStop(idx)}
+                        className="p-2 bg-red-50 text-red-400 hover:text-red-600 transition-all active:scale-90 rounded-xl"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 빠른 선택 버튼 */}
+                  <div className="flex flex-wrap gap-2">
+                    {profile?.homeAddress && (
+                      <button 
+                        type="button" 
+                        onClick={() => handleQuickSelect(idx, { name: profile.homeAlias || '우리집', address: profile.homeAddress, lat: profile.homeLat, lng: profile.homeLng })}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-600 text-white text-xs font-black shadow-md shadow-indigo-100/50 active:scale-95 transition-all"
+                      >
+                        <span>🏠</span>
+                        <span>{profile.homeAlias || '우리집'}</span>
+                      </button>
+                    )}
+                    {profile?.savedLocations?.length > 0 && (
+                      <button 
+                        type="button" 
+                        onClick={() => setFavSelectorIdx(idx)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-500 text-xs font-black active:scale-95 transition-all"
+                      >
+                        <Star size={12} className={favSelectorIdx === idx ? 'fill-amber-400 text-amber-400' : ''} />
+                        <span>즐겨찾기</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 주소 검색 - 풀 너비 버튼 */}
+                  <div className="relative">
+                    <button
+                      type="button"
                       onClick={() => openSearch(idx)}
-                      className="w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-white sm:bg-slate-50 border border-slate-100 group-hover:border-indigo-200 cursor-pointer focus:bg-white focus:ring-4 focus:ring-indigo-50/50 outline-none transition-all font-bold text-slate-700 truncate"
-                      value={wp.address}
-                    />
-                    {!wp.address && (
-                      <span className="absolute right-4 sm:right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-500 border border-indigo-100 px-2 py-1 rounded-lg pointer-events-none opacity-60">검색</span>
-                    )}
-                  </div>
-
-                  <div className="w-full sm:flex-1 relative">
-                    <input 
-                      type="text" 
-                      placeholder="명칭 (필수)" 
-                      className={`w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-white sm:bg-slate-50 border-2 outline-none transition-all font-bold text-sm ${
-                        wp.alias ? 'border-transparent text-slate-600 focus:border-indigo-400 focus:bg-white' : 'border-red-50 text-red-500 focus:border-red-200'
-                      } truncate`}
-                      value={wp.alias}
-                      onChange={(e) => handleAliasChange(idx, e.target.value)}
-                    />
-                    {!wp.alias && (
-                      <span className="absolute -top-5 right-1 text-[9px] font-black text-red-500 animate-pulse">필수</span>
-                    )}
-                  </div>
-
-                  <div className="w-full sm:flex-1 relative">
-                    <input 
-                      type="text" 
-                      placeholder="방문 목적 (필수)" 
-                      readOnly={idx === 0}
-                      className={`w-full px-4 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl outline-none transition-all font-bold text-sm truncate ${
-                        idx === 0 
-                        ? 'bg-slate-100/50 text-slate-400 border-transparent cursor-not-allowed'
-                        : (wp.purpose ? 'bg-white sm:bg-slate-50 border-transparent text-slate-600 focus:border-indigo-400 focus:bg-white' : 'bg-white sm:bg-slate-50 border-red-50 text-red-500 focus:border-red-200')
+                      className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl border-2 transition-all font-bold text-sm text-left ${
+                        wp.address 
+                          ? 'bg-white border-slate-100 text-slate-700' 
+                          : 'bg-white border-dashed border-slate-200 text-slate-300'
                       }`}
-                      value={wp.purpose}
-                      onChange={(e) => handleStopPurposeChange(idx, e.target.value)}
-                    />
-                    {!wp.purpose && (
-                      <span className="absolute -top-5 right-1 text-[9px] font-black text-red-500 animate-pulse">필수</span>
+                    >
+                      <span className="flex-1 mr-2 truncate">{wp.address || `${wp.label} 주소를 검색하세요`}</span>
+                      <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-1 rounded-lg shrink-0">검색</span>
+                    </button>
+                    {!wp.address && (
+                      <span className="absolute -bottom-4 right-0 text-[9px] font-black text-red-500">필수</span>
                     )}
                   </div>
 
-                  <div className="flex w-full sm:w-auto items-center gap-3">
-                    <div className="flex-1 sm:w-24 relative">
+                  {/* 명칭 + 방문 목적 */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        placeholder="명칭 (필수)"
+                        className={`w-full px-3 py-3 rounded-xl border-2 outline-none transition-all font-bold text-sm ${
+                          wp.alias ? 'border-transparent bg-slate-50 text-slate-700 focus:border-indigo-300 focus:bg-white' : 'border-red-100 bg-red-50/30 text-red-400 focus:border-red-300'
+                        }`}
+                        value={wp.alias}
+                        onChange={(e) => handleAliasChange(idx, e.target.value)}
+                      />
+                    </div>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        placeholder={idx === 0 ? '출발' : '방문 목적 (필수)'}
+                        readOnly={idx === 0}
+                        className={`w-full px-3 py-3 rounded-xl outline-none transition-all font-bold text-sm border-2 ${
+                          idx === 0 
+                          ? 'bg-slate-100 text-slate-400 border-transparent cursor-not-allowed'
+                          : (wp.purpose ? 'border-transparent bg-slate-50 text-slate-700 focus:border-indigo-300 focus:bg-white' : 'border-red-100 bg-red-50/30 text-red-400 focus:border-red-300')
+                        }`}
+                        value={wp.purpose}
+                        onChange={(e) => handleStopPurposeChange(idx, e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 주차비 */}
+                  <div className="flex items-center gap-2 bg-white rounded-xl border border-slate-100 px-4 py-3">
+                    <span className="text-xs font-black text-slate-400">회사 주차비</span>
+                    <div className="relative flex-1">
                       <input 
                         type="number" 
-                        placeholder="주차비" 
-                        className="w-full pl-3 pr-8 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-white sm:bg-slate-50 border-none outline-none font-bold text-sm sm:text-xs text-indigo-600 focus:bg-indigo-50/50 transition-all text-right appearance-none"
+                        placeholder="0"
+                        className="w-full pr-6 pl-2 py-1 bg-transparent outline-none font-black text-indigo-600 text-sm text-right appearance-none"
                         value={wp.parkingFee || ''}
                         onChange={(e) => {
                           const newWaypoints = [...formData.waypoints];
@@ -1483,36 +1549,31 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
                           setFormData({ ...formData, waypoints: newWaypoints });
                         }}
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-300">원</span>
+                      <span className="absolute right-0 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300">원</span>
                     </div>
-
-                    {idx > 0 && idx < formData.waypoints.length - 1 ? (
-                      <button 
-                        type="button" 
-                        onClick={() => removeStop(idx)}
-                        className="p-3 bg-red-50 text-red-400 hover:text-red-600 sm:bg-transparent sm:text-slate-300 transition-all active:scale-90 rounded-xl"
-                      >
-                        <Trash2 size={20} />
-                      </button>
-                    ) : (
-                      <div className="w-10 sm:w-8"></div>
+                    {wp.parkingFee > 0 && (
+                      <input 
+                        type="text"
+                        placeholder="사유 (예: 유료주차장)"
+                        className="flex-[2] px-3 py-1 rounded-lg bg-indigo-50/50 border border-indigo-100/50 outline-none font-bold text-xs text-indigo-700 focus:bg-indigo-50 transition-all"
+                        value={wp.parkingNote || ''}
+                        onChange={(e) => {
+                          const newWaypoints = [...formData.waypoints];
+                          newWaypoints[idx].parkingNote = e.target.value;
+                          setFormData({ ...formData, waypoints: newWaypoints });
+                        }}
+                      />
                     )}
                   </div>
                 </div>
 
-                {wp.parkingFee > 0 && (
-                  <div className="w-full animate-fade-in px-1">
-                    <input 
-                      type="text"
-                      placeholder="주차 사유/장소 (예: 유료주차장, 발렛 등)"
-                      className="w-full px-4 py-3 rounded-xl bg-indigo-50/30 border border-indigo-100/50 outline-none font-bold text-xs text-indigo-700 focus:bg-indigo-50 transition-all"
-                      value={wp.parkingNote || ''}
-                      onChange={(e) => {
-                        const newWaypoints = [...formData.waypoints];
-                        newWaypoints[idx].parkingNote = e.target.value;
-                        setFormData({ ...formData, waypoints: newWaypoints });
-                      }}
-                    />
+                {/* 경로 연결선 */}
+                {idx < formData.waypoints.length - 1 && (
+                  <div className="flex items-center justify-center py-1">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <div className="w-px h-2 bg-slate-200"></div>
+                      <div className="w-px h-2 bg-slate-200"></div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1520,59 +1581,58 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
           </div>
         </div>
 
-        <div className="md:col-span-2">
+        {/* Section 3: 업무 상세 */}
+        <div className="px-5 py-5 sm:px-10">
           <InputGroup label="업무 상세 내용" icon={<FileText size={16}/>}>
             <input 
               type="text" 
               placeholder="특이사항이나 세부 목적을 입력하세요." 
-              className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-bold text-slate-700"
+              className="w-full px-4 py-3.5 rounded-xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-bold text-slate-700"
               value={formData.purpose}
               onChange={e => setFormData({...formData, purpose: e.target.value})}
             />
           </InputGroup>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 premium-card p-5 sm:p-8 rounded-3xl sm:rounded-[2.5rem]">
-          <div className="flex flex-col justify-center">
-            <div className="flex items-center justify-between mb-3 sm:mb-2">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Total Distance</p>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <div className="text-4xl sm:text-5xl font-black text-slate-900 flex items-baseline gap-1 tracking-tight">
-                {formData.distance} <span className="text-xl text-slate-400">km</span>
+        {/* Section 4: 거리 및 그싨 정산 */}
+        <div className="p-5 sm:p-10">
+          <div className="grid grid-cols-2 gap-4 premium-card p-5 rounded-2xl sm:rounded-[2rem]">
+            <div className="flex flex-col justify-center">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Total Distance</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">{formData.distance}</span>
+                <span className="text-lg text-slate-400 font-bold">km</span>
               </div>
+              <p className="text-[10px] font-bold text-slate-400 mt-2">시스템 자동 산출 (1.25배 보정)</p>
             </div>
-            <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 mt-3 px-1">
-              시스템 자동 산출 직선 거리 (1.25배 보정)
-            </p>
-          </div>
-          <div className="p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-premium-gradient shadow-2xl shadow-indigo-200 text-white flex justify-between items-center transition-all duration-500 hover:scale-[1.02]">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-1">Expected Amount</p>
-              <h4 className="text-3xl sm:text-4xl font-black">{calculatedAmount.toLocaleString()}<span className="text-base sm:text-lg ml-1.5 opacity-60">원</span></h4>
-              <p className="text-[10px] sm:text-[11px] font-black opacity-50 mt-1">
-                유류 {(Math.round(formData.distance * Number(fuelRates?.[formData.fuelType]?.unitPrice || 0))).toLocaleString()} + 
+            <div className="p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-premium-gradient shadow-xl shadow-indigo-200 text-white flex flex-col justify-between">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-80 mb-1">Expected</p>
+                <h4 className="text-xl sm:text-3xl font-black">{calculatedAmount.toLocaleString()}<span className="text-xs sm:text-base ml-1 opacity-60">원</span></h4>
+              </div>
+              <p className="text-[9px] font-bold opacity-50 mt-2">
+                유료 {(Math.round(formData.distance * Number(fuelRates?.[formData.fuelType]?.unitPrice || 0))).toLocaleString()} + 
                 주차 {formData.waypoints.reduce((acc, wp) => acc + (Number(wp.parkingFee) || 0), 0).toLocaleString()}
               </p>
-            </div>
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/20 backdrop-blur-md rounded-xl sm:rounded-2xl flex items-center justify-center border border-white/30 self-center">
-              <Calculator size={24} className="opacity-90" />
             </div>
           </div>
         </div>
 
-        <button 
-          type="submit" 
-          disabled={!isFormValid}
-          className={`w-full py-4 sm:py-6 rounded-2xl font-black text-base sm:text-lg transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-[0.98] ${
-            isFormValid 
-            ? 'bg-slate-900 text-white shadow-indigo-100 hover:bg-black' 
-            : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-          }`}
-        >
-          {initialData ? <Settings size={22} /> : <PlusCircle size={22} />} 
-          {initialData ? '기록 수정 완료하기' : (formData.distance > 0 ? '기록 완료하기' : '상세 정보를 입력해 주세요')}
-        </button>
+        {/* Section 5: 제출 버튼 */}
+        <div className="p-5 sm:p-10 pt-0">
+          <button 
+            type="submit" 
+            disabled={!isFormValid}
+            className={`w-full py-4 sm:py-5 rounded-2xl font-black text-base transition-all shadow-lg flex items-center justify-center gap-3 active:scale-[0.98] ${
+              isFormValid 
+              ? 'bg-slate-900 text-white shadow-slate-200 hover:bg-black' 
+              : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+            }`}
+          >
+            {initialData ? <Settings size={20} /> : <PlusCircle size={20} />} 
+            {initialData ? '기록 수정 완료하기' : (formData.distance > 0 ? '기록 완료하기' : '상세 정보를 입력해 주세요')}
+          </button>
+        </div>
       </form>
 
       {/* Favorites Selector Modal - Moved outside loop to prevent UI flickering/duplication */}
@@ -1712,62 +1772,64 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit }) 
   return (
     <>
       {/* Statistics & Filter Header */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8 px-2">
-        <div className="flex flex-wrap gap-4 items-center">
-          <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-[1.5rem] border border-slate-100 shadow-sm focus-within:ring-4 ring-indigo-50 transition-all">
-            <Calendar size={18} className="text-indigo-500" />
+      <div className="flex flex-col gap-4 mb-6">
+        {/* Row 1: 월 선택 + 사용자 검색 */}
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 ring-indigo-50 transition-all flex-1 min-w-[160px] max-w-[220px]">
+            <Calendar size={16} className="text-indigo-500 shrink-0" />
             <input 
               type="month" 
-              className="bg-transparent font-black text-slate-700 outline-none cursor-pointer text-sm"
+              className="bg-transparent font-black text-slate-700 outline-none cursor-pointer text-sm w-full"
               value={selectedMonth}
               onChange={(e) => {
                 setSelectedMonth(e.target.value);
-                setSelectedDateFilter(''); // 월 변경 시 특정 일자 필터 초기화
+                setSelectedDateFilter('');
               }}
             />
           </div>
-          <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-[1.5rem] border border-slate-100 shadow-sm focus-within:ring-4 ring-indigo-50 transition-all">
-            <Search size={16} className="text-slate-300" />
+          <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 ring-indigo-50 transition-all flex-1 min-w-[140px]">
+            <Search size={16} className="text-slate-300 shrink-0" />
             <input 
               type="text" 
               placeholder="사용자명 검색"
-              className="bg-transparent font-black text-slate-700 outline-none text-sm placeholder:text-slate-300 w-28"
+              className="bg-transparent font-black text-slate-700 outline-none text-sm placeholder:text-slate-300 w-full"
               value={memberFilter}
               onChange={(e) => setMemberFilter(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-[1.5rem] border border-slate-100 shadow-sm focus-within:ring-4 ring-indigo-50 transition-all">
-            <Calendar size={18} className="text-emerald-500" />
+          <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 ring-indigo-50 transition-all flex-1 min-w-[160px]">
+            <Calendar size={16} className="text-emerald-500 shrink-0" />
             <input 
               type="date" 
-              className="bg-transparent font-black text-slate-700 outline-none cursor-pointer text-sm"
+              className="bg-transparent font-black text-slate-700 outline-none cursor-pointer text-sm w-full"
               value={selectedDateFilter}
               onChange={(e) => setSelectedDateFilter(e.target.value)}
             />
             {selectedDateFilter && (
-              <button onClick={() => setSelectedDateFilter('')} className="p-1 hover:bg-slate-50 rounded-lg transition-all text-slate-400">
+              <button onClick={() => setSelectedDateFilter('')} className="p-1 hover:bg-slate-50 rounded-lg transition-all text-slate-400 shrink-0">
                 <X size={14} />
               </button>
             )}
           </div>
-          <div className="h-8 w-px bg-slate-200 mx-2 hidden xl:block"></div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-             <div className="bg-white px-5 py-3 rounded-2xl border border-slate-100 shadow-sm">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">총 KM</p>
-                <p className="text-sm font-black text-slate-900">{stats.totalDist.toFixed(1)}<span className="text-[10px] ml-0.5 opacity-50">km</span></p>
-             </div>
-             <div className="bg-white px-5 py-3 rounded-2xl border border-slate-100 shadow-sm">
-                <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">주유비</p>
-                <p className="text-sm font-black text-slate-900">{stats.totalFuel.toLocaleString()}<span className="text-[10px] ml-0.5 opacity-50">원</span></p>
-             </div>
-             <div className="bg-white px-5 py-3 rounded-2xl border border-slate-100 shadow-sm">
-                <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">주차비</p>
-                <p className="text-sm font-black text-slate-900">{stats.totalParking.toLocaleString()}<span className="text-[10px] ml-0.5 opacity-50">원</span></p>
-             </div>
-             <div className="bg-indigo-600 px-6 py-3 rounded-2xl shadow-lg shadow-indigo-100">
-                <p className="text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-1">정산 합계</p>
-                <p className="text-sm font-black text-white">{stats.totalAmount.toLocaleString()}<span className="text-[10px] ml-0.5 opacity-60">원</span></p>
-             </div>
+        </div>
+
+        {/* Row 2: 통계 카드 */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-white px-4 py-3.5 rounded-2xl border border-slate-100 shadow-sm">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">총 KM</p>
+            <p className="text-base font-black text-slate-900">{stats.totalDist.toFixed(1)}<span className="text-xs ml-0.5 opacity-50">km</span></p>
+          </div>
+          <div className="bg-white px-4 py-3.5 rounded-2xl border border-slate-100 shadow-sm">
+            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">주유비</p>
+            <p className="text-base font-black text-slate-900">{stats.totalFuel.toLocaleString()}<span className="text-xs ml-0.5 opacity-50">원</span></p>
+          </div>
+          <div className="bg-white px-4 py-3.5 rounded-2xl border border-slate-100 shadow-sm">
+            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">주차비</p>
+            <p className="text-base font-black text-slate-900">{stats.totalParking.toLocaleString()}<span className="text-xs ml-0.5 opacity-50">원</span></p>
+          </div>
+          <div className="bg-indigo-600 px-4 py-3.5 rounded-2xl shadow-lg shadow-indigo-100">
+            <p className="text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-1">정산 합계</p>
+            <p className="text-base font-black text-white">{stats.totalAmount.toLocaleString()}<span className="text-xs ml-0.5 opacity-60">원</span></p>
           </div>
         </div>
       </div>
@@ -1939,68 +2001,65 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit }) 
         <div className="sm:hidden divide-y divide-slate-100">
           {filteredLogs.length === 0 ? (
             <div className="px-6 py-20 text-center">
-               <History size={32} className="mx-auto text-slate-200 mb-4" />
-               <p className="text-slate-400 font-bold">운행 내역이 없습니다.</p>
+               <History size={36} className="mx-auto text-slate-200 mb-4" />
+               <p className="text-slate-500 font-bold">운행 내역이 없습니다.</p>
+               <p className="text-slate-300 text-xs mt-1">해당 월에 등록된 운행이 없어요</p>
             </div>
           ) : (
             filteredLogs.map((log) => {
               const locked = isLogLocked(log);
               const isPending = log.requestStatus === 'pending';
               const isApproved = log.requestStatus === 'approved';
+              // 경로 요약: 출발 → 도착 방식으로 간략 표시
+              const routeStops = log.routeSummary ? log.routeSummary.split(' → ') : null;
+              const departure = routeStops ? routeStops[0] : log.departure;
+              const destination = routeStops ? routeStops[routeStops.length - 1] : log.destination;
               return (
-                <div key={log.id} className="p-5 flex flex-col gap-4 bg-white hover:bg-slate-50/50 transition-all">
+                <div key={log.id} className="p-4 flex flex-col gap-3 bg-white active:bg-slate-50 transition-all">
+                  {/* 상단: 날짜 + 금액 */}
                   <div className="flex justify-between items-start">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-slate-900 text-sm">{log.date}</span>
-                        {locked && <span className="bg-amber-50 text-amber-500 text-[8px] font-black px-1.5 py-0.5 rounded-md">마감</span>}
-                        {isApproved && <span className="bg-emerald-50 text-emerald-600 text-[8px] font-black px-1.5 py-0.5 rounded-md animate-pulse">보정 승인</span>}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-slate-900">{log.date}</span>
+                        {locked && <span className="bg-amber-50 text-amber-600 text-[9px] font-black px-2 py-0.5 rounded-lg inline-flex items-center gap-1"><Lock size={9} />마감</span>}
+                        {isApproved && <span className="bg-emerald-50 text-emerald-600 text-[9px] font-black px-2 py-0.5 rounded-lg border border-emerald-100">보정 승인</span>}
+                        {isPending && <span className="bg-blue-50 text-blue-600 text-[9px] font-black px-2 py-0.5 rounded-lg">검토 중</span>}
                       </div>
-                      <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                        {log.userName}
+                      <div className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                        <span className="truncate max-w-[160px]">{log.userName}</span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-black text-indigo-600 text-lg">
-                        {Number(log.amount || 0).toLocaleString()}<span className="text-[10px] ml-0.5 opacity-60">원</span>
+                    <div className="text-right shrink-0 pl-2">
+                      <div className="font-black text-indigo-600 text-xl">
+                        {Number(log.amount || 0).toLocaleString()}<span className="text-xs ml-0.5 opacity-60">원</span>
                       </div>
-                      <div className="text-[9px] font-bold text-slate-400 shrink-0">
+                      <div className="text-[10px] font-bold text-slate-400">
                         {log.distance}km · {log.fuelType === 'gasoline' ? '휘발유' : log.fuelType === 'diesel' ? '경유' : 'LPG'}
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-slate-50/50 p-4 rounded-xl space-y-3">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {log.routeSummary ? (
-                        log.routeSummary.split(' → ').map((stop, sIdx, arr) => (
-                          <React.Fragment key={sIdx}>
-                            <span className="text-[11px] font-bold text-slate-600">{stop}</span>
-                            {sIdx < arr.length - 1 && <ChevronRight size={10} className="text-slate-300" />}
-                          </React.Fragment>
-                        ))
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-bold text-slate-600">{log.departure}</span>
-                          <ChevronRight size={10} className="text-slate-300" />
-                          <span className="text-[11px] font-bold text-slate-600">{log.destination}</span>
+                  {/* 경로 */}
+                  <div className="bg-slate-50 px-3.5 py-3 rounded-xl flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-xs font-bold text-slate-600 truncate">{departure}</span>
+                        <ChevronRight size={12} className="text-slate-300 shrink-0" />
+                        <span className="text-xs font-bold text-slate-600 truncate">{destination}</span>
+                      </div>
+                      {log.purpose && (
+                        <div className="mt-1.5">
+                          <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                            <span className="opacity-50">#</span>{log.purpose}
+                          </span>
                         </div>
                       )}
                     </div>
-                    {log.purpose && (
-                      <div className="text-[10px] font-black text-indigo-500 bg-white px-2 py-1 rounded-md inline-flex items-center gap-1.5 border border-indigo-50">
-                        <span className="opacity-50">#</span> {log.purpose}
-                      </div>
-                    )}
-                    {isPending && (
-                      <div className="text-[9px] font-black text-blue-600 block pt-1">
-                        보정 승인 대기 중 ({log.requestType === 'delete' ? '삭제' : '수정'})
-                      </div>
-                    )}
                   </div>
 
-                  <div className="flex justify-end gap-2 border-t border-slate-50 pt-3">
+                  {/* 액션 버튼 */}
+                  <div className="flex gap-2">
                     <ActionButtons log={log} locked={locked} isPending={isPending} isApproved={isApproved} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} setRequestModal={setRequestModal} isMobile />
                   </div>
                 </div>
@@ -2431,106 +2490,163 @@ const MyPage = ({ profile, onUpdate, showStatus }) => {
 
 // --- Enhanced Components ---
 
-const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCollapsed, onToggle, setEditingLog, pendingRequestsCount }) => (
-  <nav className={`fixed bottom-0 lg:top-0 left-0 w-full ${isCollapsed ? 'lg:w-20' : 'lg:w-72'} bg-white border-t lg:border-t-0 lg:border-r border-slate-100 flex lg:flex-col p-4 lg:p-6 z-50 transition-all duration-500 ease-in-out lg:overflow-y-auto lg:h-full scrollbar-none`}>
-    <div className={`hidden lg:flex items-center ${isCollapsed ? 'justify-center mb-5' : 'justify-between mb-6 px-2'}`}>
-      <div className="flex items-center gap-4">
-        <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100 shrink-0">
-          <Car size={20} strokeWidth={3} />
-        </div>
-        {!isCollapsed && (
-          <div className="animate-fade-in">
-            <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">C-OIL</h1>
-            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none mt-1">Platform</p>
-          </div>
-        )}
-      </div>
-      {!isCollapsed && (
-        <button 
-          onClick={onToggle}
-          className="p-1.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"
-        >
-          <PanelLeftClose size={16} />
-        </button>
-      )}
-    </div>
-
-    {/* User Profile Summary */}
-    <div className={`hidden lg:block transition-all duration-500 ${isCollapsed ? 'mb-6' : 'mb-8 px-1'}`}>
-      {isCollapsed ? (
-        <div className="flex justify-center">
-          <div className="relative w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-slate-100 group cursor-pointer" onClick={() => onNavigate('profile')}>
-            {userProfile?.userName?.[0] || 'U'}
-            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>
-          </div>
-        </div>
-      ) : (
-        <div className="relative p-4 rounded-[1.8rem] bg-indigo-50/30 border border-indigo-100/50 animate-fade-in overflow-hidden">
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-white font-black text-sm shadow-xl shadow-indigo-100">
-                {userProfile?.userName?.[0] || 'U'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[8px] font-black text-indigo-500 uppercase tracking-widest mb-0.5">Connect Status</p>
-                <h2 className="text-sm font-black text-slate-900 truncate tracking-tight">{userProfile?.userName || '사용자'}</h2>
-                <p className="text-[9.5px] font-bold text-slate-400 truncate mt-0.5">{userProfile?.email}</p>
-              </div>
+const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCollapsed, onToggle, setEditingLog, pendingRequestsCount }) => {
+  const profileIncomplete = !userProfile?.vehicleName || !userProfile?.fuelType;
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <nav className={`hidden lg:flex fixed top-0 left-0 ${isCollapsed ? 'w-20' : 'w-72'} bg-white border-r border-slate-100 flex-col p-6 z-50 transition-all duration-500 ease-in-out overflow-y-auto h-full scrollbar-none`}>
+        <div className={`flex items-center ${isCollapsed ? 'justify-center mb-5' : 'justify-between mb-6 px-2'}`}>
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100 shrink-0">
+              <Car size={20} strokeWidth={3} />
             </div>
-            <div className="flex items-center gap-2 pt-2.5 border-t border-indigo-100/50">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-xl text-indigo-600 shadow-sm border border-indigo-50 overflow-hidden shrink min-w-0">
-                <Users size={11} strokeWidth={3} className="shrink-0" />
-                <span className="text-[9.5px] font-black tracking-tight truncate">{userProfile?.department || '미지정'}</span>
+            {!isCollapsed && (
+              <div className="animate-fade-in">
+                <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">C-OIL</h1>
+                <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none mt-1">Platform</p>
               </div>
-              {userProfile?.role === 'manager' && (
-                <div className="px-1.5 py-1 bg-amber-500 text-white rounded-lg text-[8px] font-black uppercase tracking-tighter shrink-0 animate-fade-in shadow-sm shadow-amber-100">리더</div>
-              )}
-              {userProfile?.role === 'admin' && (
-                <div className="px-1.5 py-1 bg-indigo-600 text-white rounded-lg text-[8px] font-black uppercase tracking-tighter shrink-0 animate-fade-in shadow-sm shadow-indigo-100">인사</div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-
-    {isCollapsed && (
-      <button 
-        onClick={onToggle}
-        className="hidden lg:flex items-center justify-center p-3 mb-6 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
-      >
-        <PanelLeftOpen size={18} />
-      </button>
-    )}
-
-    <div className="flex lg:flex-col flex-1 gap-1 lg:gap-1.5 min-h-0">
-      {(() => {
-        const profileIncomplete = !userProfile?.vehicleName || !userProfile?.fuelType;
-        return (
-          <>
-            <NavItem isCollapsed={isCollapsed} icon={<LayoutDashboard />} label="대시보드" active={currentView === 'dashboard'} onClick={() => { onNavigate('dashboard'); setEditingLog(null); }} disabled={profileIncomplete} />
-            <NavItem isCollapsed={isCollapsed} icon={<PlusCircle />} label="신규 운행" active={currentView === 'log'} onClick={() => { onNavigate('log'); setEditingLog(null); }} disabled={profileIncomplete} />
-            <NavItem isCollapsed={isCollapsed} icon={<History />} label="정산 내역" active={currentView === 'history'} onClick={() => { onNavigate('history'); setEditingLog(null); }} disabled={profileIncomplete} />
-            {isAdmin && (
-              <>
-                <div className={`hidden lg:block h-px bg-slate-100 my-2 ${isCollapsed ? 'mx-2' : 'mx-4'}`}></div>
-                <NavItem isCollapsed={isCollapsed} icon={<FileText />} label="운행 통계" active={currentView === 'reports'} onClick={() => onNavigate('reports')} disabled={profileIncomplete} />
-                <NavItem isCollapsed={isCollapsed} icon={<Users />} label="인사/조직 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} disabled={profileIncomplete} badge={pendingRequestsCount} />
-              </>
             )}
-            <div className="flex-1 hidden lg:block min-h-[1.5rem]"></div>
-            <NavItem isCollapsed={isCollapsed} icon={<UserCircle />} label="내 정보" active={currentView === 'profile'} onClick={() => onNavigate('profile')} />
-          </>
-        );
-      })()}
-      <button 
-        onClick={onLogout}
-        className={`hidden lg:flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-5'} py-3.5 rounded-2xl text-[13px] font-bold text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all mt-2 active:scale-95`}
-      >
-        {isCollapsed ? <LogOut size={20} /> : <><LogOut size={16} /> <span className="tracking-tight">로그아웃</span></>}
-      </button>
-    </div>
-  </nav>
+          </div>
+          {!isCollapsed && (
+            <button onClick={onToggle} className="p-1.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+              <PanelLeftClose size={16} />
+            </button>
+          )}
+        </div>
+
+        <div className={`transition-all duration-500 ${isCollapsed ? 'mb-6' : 'mb-8 px-1'}`}>
+          {isCollapsed ? (
+            <div className="flex justify-center">
+              <div className="relative w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-white font-black text-sm shadow-lg cursor-pointer" onClick={() => onNavigate('profile')}>
+                {userProfile?.userName?.[0] || 'U'}
+                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>
+              </div>
+            </div>
+          ) : (
+            <div className="relative p-4 rounded-[1.8rem] bg-indigo-50/30 border border-indigo-100/50 animate-fade-in overflow-hidden">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-white font-black text-sm shadow-xl shadow-indigo-100">
+                  {userProfile?.userName?.[0] || 'U'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[8px] font-black text-indigo-500 uppercase tracking-widest mb-0.5">Connect Status</p>
+                  <h2 className="text-sm font-black text-slate-900 truncate tracking-tight">{userProfile?.userName || '사용자'}</h2>
+                  <p className="text-[9.5px] font-bold text-slate-400 truncate mt-0.5">{userProfile?.email}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-2.5 border-t border-indigo-100/50">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-xl text-indigo-600 shadow-sm border border-indigo-50 overflow-hidden shrink min-w-0">
+                  <Users size={11} strokeWidth={3} className="shrink-0" />
+                  <span className="text-[9.5px] font-black tracking-tight truncate">{userProfile?.department || '미지정'}</span>
+                </div>
+                {userProfile?.role === 'manager' && <div className="px-1.5 py-1 bg-amber-500 text-white rounded-lg text-[8px] font-black uppercase tracking-tighter shrink-0 shadow-sm shadow-amber-100">리더</div>}
+                {userProfile?.role === 'admin' && <div className="px-1.5 py-1 bg-indigo-600 text-white rounded-lg text-[8px] font-black uppercase tracking-tighter shrink-0 shadow-sm shadow-indigo-100">인사</div>}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {isCollapsed && (
+          <button onClick={onToggle} className="flex items-center justify-center p-3 mb-6 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm">
+            <PanelLeftOpen size={18} />
+          </button>
+        )}
+
+        <div className="flex flex-col flex-1 gap-1.5 min-h-0">
+          <NavItem isCollapsed={isCollapsed} icon={<LayoutDashboard />} label="대시보드" active={currentView === 'dashboard'} onClick={() => { onNavigate('dashboard'); setEditingLog(null); }} disabled={profileIncomplete} />
+          <NavItem isCollapsed={isCollapsed} icon={<PlusCircle />} label="신규 운행" active={currentView === 'log'} onClick={() => { onNavigate('log'); setEditingLog(null); }} disabled={profileIncomplete} />
+          <NavItem isCollapsed={isCollapsed} icon={<History />} label="정산 내역" active={currentView === 'history'} onClick={() => { onNavigate('history'); setEditingLog(null); }} disabled={profileIncomplete} />
+          {isAdmin && (
+            <>
+              <div className={`h-px bg-slate-100 my-2 ${isCollapsed ? 'mx-2' : 'mx-4'}`}></div>
+              <NavItem isCollapsed={isCollapsed} icon={<FileText />} label="운행 통계" active={currentView === 'reports'} onClick={() => onNavigate('reports')} disabled={profileIncomplete} />
+              <NavItem isCollapsed={isCollapsed} icon={<Users />} label="인사/조직 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} disabled={profileIncomplete} badge={pendingRequestsCount} />
+            </>
+          )}
+          <div className="flex-1 min-h-[1.5rem]"></div>
+          <NavItem isCollapsed={isCollapsed} icon={<UserCircle />} label="내 정보" active={currentView === 'profile'} onClick={() => onNavigate('profile')} />
+          <button
+            onClick={onLogout}
+            className={`flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-5'} py-3.5 rounded-2xl text-[13px] font-bold text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all mt-2 active:scale-95`}
+          >
+            {isCollapsed ? <LogOut size={20} /> : <><LogOut size={16} /><span className="tracking-tight">로그아웃</span></>}
+          </button>
+        </div>
+      </nav>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+        <div className="flex items-stretch h-16 px-1">
+          {/* 대시보드 */}
+          <MobileNavItem
+            icon={<LayoutDashboard size={22} />}
+            label="대시보드"
+            active={currentView === 'dashboard'}
+            disabled={profileIncomplete}
+            onClick={() => { onNavigate('dashboard'); setEditingLog(null); }}
+          />
+          {/* 신규 운행 - 강조 버튼 */}
+          <div className="flex-1 flex items-center justify-center relative">
+            <button
+              disabled={profileIncomplete}
+              onClick={() => { onNavigate('log'); setEditingLog(null); }}
+              className={`absolute -top-5 w-14 h-14 rounded-2xl flex flex-col items-center justify-center shadow-xl transition-all active:scale-95 ${
+                profileIncomplete ? 'bg-slate-200 cursor-not-allowed' :
+                currentView === 'log' ? 'bg-indigo-700 shadow-indigo-300' : 'bg-indigo-600 shadow-indigo-200'
+              }`}
+            >
+              <PlusCircle size={26} className="text-white" />
+            </button>
+          </div>
+          {/* 정산 내역 */}
+          <MobileNavItem
+            icon={<History size={22} />}
+            label="정산 내역"
+            active={currentView === 'history'}
+            disabled={profileIncomplete}
+            onClick={() => { onNavigate('history'); setEditingLog(null); }}
+          />
+          {/* 내 정보 */}
+          <MobileNavItem
+            icon={<UserCircle size={22} />}
+            label="내 정보"
+            active={currentView === 'profile'}
+            onClick={() => onNavigate('profile')}
+            badge={pendingRequestsCount > 0 && isAdmin ? pendingRequestsCount : 0}
+          />
+        </div>
+        {/* Home indicator area */}
+        <div className="h-safe-area-inset-bottom bg-white"></div>
+      </nav>
+    </>
+  );
+};
+
+const MobileNavItem = ({ icon, label, active, onClick, disabled, badge }) => (
+  <button
+    onClick={disabled ? undefined : onClick}
+    className={`flex-1 flex flex-col items-center justify-center gap-0.5 pt-2 pb-1 transition-all relative ${
+      disabled ? 'opacity-30' : 'active:scale-95'
+    }`}
+  >
+    {active && (
+      <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-indigo-600 rounded-full"></span>
+    )}
+    <span className={`transition-colors ${
+      active ? 'text-indigo-600' : 'text-slate-400'
+    }`}>
+      {icon}
+    </span>
+    <span className={`text-[10px] font-bold tracking-tight transition-colors ${
+      active ? 'text-indigo-600' : 'text-slate-400'
+    }`}>{label}</span>
+    {badge > 0 && (
+      <span className="absolute top-1.5 right-[calc(50%-12px)] flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white shadow-sm">
+        {badge}
+      </span>
+    )}
+  </button>
 );
 
 const AuthScreen = ({ onLogin, onSignup, onResetPassword, orgUnits: initialOrgUnits, db, appId }) => {
