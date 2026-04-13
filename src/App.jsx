@@ -1461,20 +1461,44 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
                         idx === 0 
                         ? 'bg-slate-100/50 text-slate-400 border-transparent cursor-not-allowed'
                         : (wp.purpose ? 'bg-white sm:bg-slate-50 border-transparent text-slate-600 focus:border-indigo-400 focus:bg-white' : 'bg-white sm:bg-slate-50 border-red-50 text-red-500 focus:border-red-200')
-             <div className="flex flex-col justify-center">
-            <div className="flex items-center justify-between mb-3 sm:mb-2">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Total Distance</p>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <div className="text-4xl sm:text-5xl font-black text-slate-900 flex items-baseline gap-1 tracking-tight">
-                {formData.distance} <span className="text-xl text-slate-400">km</span>
-              </div>
-            </div>
-            <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 mt-3 px-1">
-              시스템 자동 산출 직선 거리 (1.25배 보정)
-            </p>
-          </div>
-   </div>
+                      }`}
+                      value={wp.purpose}
+                      onChange={(e) => handleStopPurposeChange(idx, e.target.value)}
+                    />
+                    {!wp.purpose && (
+                      <span className="absolute -top-5 right-1 text-[9px] font-black text-red-500 animate-pulse">필수</span>
+                    )}
+                  </div>
+
+                  <div className="flex w-full sm:w-auto items-center gap-3">
+                    <div className="flex-1 sm:w-24 relative">
+                      <input 
+                        type="number" 
+                        placeholder="주차비" 
+                        className="w-full pl-3 pr-8 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-white sm:bg-slate-50 border-none outline-none font-bold text-sm sm:text-xs text-indigo-600 focus:bg-indigo-50/50 transition-all text-right appearance-none"
+                        value={wp.parkingFee || ''}
+                        onChange={(e) => {
+                          const newWaypoints = [...formData.waypoints];
+                          newWaypoints[idx].parkingFee = parseInt(e.target.value) || 0;
+                          setFormData({ ...formData, waypoints: newWaypoints });
+                        }}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-300">원</span>
+                    </div>
+
+                    {idx > 0 && idx < formData.waypoints.length - 1 ? (
+                      <button 
+                        type="button" 
+                        onClick={() => removeStop(idx)}
+                        className="p-3 bg-red-50 text-red-400 hover:text-red-600 sm:bg-transparent sm:text-slate-300 transition-all active:scale-90 rounded-xl"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    ) : (
+                      <div className="w-10 sm:w-8"></div>
+                    )}
+                  </div>
+                </div>
 
                 {wp.parkingFee > 0 && (
                   <div className="w-full animate-fade-in px-1">
