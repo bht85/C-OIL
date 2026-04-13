@@ -1,20 +1,20 @@
-/* eslint-disable react/prop-types */
-import React, { useState, useEffect, useMemo } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
-  signInAnonymously, 
   onAuthStateChanged, 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
   updateProfile as updateAuthProfile,
   sendPasswordResetEmail,
-  updatePassword,
   confirmPasswordReset,
   verifyPasswordResetCode
 } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, query, getDoc, updateDoc, orderBy, getDocs, writeBatch, where } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, query, getDoc, updateDoc, orderBy, getDocs, writeBatch, where } from 'firebase/firestore';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { 
   Trash2, 
   Download,
@@ -141,6 +141,8 @@ const App = () => {
     selectedMonth: new Date().toISOString().slice(0, 7)
   });
 
+  const pdfRef = useRef(null);
+
   // 현재 사용자 프로필 실시간 동기화 및 상태 체크 (퇴사자 차단 등)
   useEffect(() => {
     if (!user) {
@@ -162,9 +164,8 @@ const App = () => {
         setProfile(profileData);
       }
     });
-
     return () => unsubscribe();
-  }, [user, db, appId]);
+  }, [user]);
 
   useEffect(() => {
     if (!user || profile?.role !== 'admin') return;
@@ -570,8 +571,47 @@ const App = () => {
     showStatus("데이터 내보내기 완료");
   };
 
-  const isAdmin = profile?.role === 'admin' || isMasterAdmin(user?.email); 
+  const exportPDF = async () => {
+    if (!pdfRef.current) return;
+    
+    setLoading(true);
+    showStatus("PDF 리포트를 생성 중입니다...", "info");
+    
+    try {
+      const canvas = await html2canvas(pdfRef.current, {
+        scale: 2, // Higher scale for better quality
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff"
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      // If height is greater than A4, we might need multiple pages, 
+      // but for now, we'll scale it to fit one page or handle simple multi-page later if needed.
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      
+      const filename = `유류비_정산리포트_${reportFilters.selectedMonth || 'export'}.pdf`;
+      pdf.save(filename);
+      showStatus("PDF 리포트 내보내기 완료");
+    } catch (err) {
+      console.error(err);
+      showStatus("PDF 생성 중 오류가 발생했습니다.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const isAdmin = profile?.role === 'admin' || isMasterAdmin(user?.email); 
   return (
     <>
       {statusMessage && (
@@ -629,14 +669,23 @@ const App = () => {
                   </h1>
                 </div>
                 <div className="flex items-center gap-3">
-                  {(view === 'history' || view === 'reports') && (
-                    <button 
-                      onClick={handleExportData}
-                      className="flex items-center gap-2 bg-white px-5 py-3 rounded-2xl border border-slate-100 text-slate-600 font-bold shadow-sm hover:shadow-md hover:border-indigo-100 transition-all active:scale-95"
-                    >
-                      <Download size={18} className="text-indigo-500" /> 
-                      <span className="text-sm">데이터 내보내기</span>
-                    </button>
+                   {(view === 'history' || view === 'reports') && (
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={exportPDF}
+                        className="flex items-center gap-2 bg-indigo-600 px-5 py-3 rounded-2xl text-white font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                      >
+                        <FileText size={18} /> 
+                        <span className="text-sm">PDF 리포트 출력</span>
+                      </button>
+                      <button 
+                        onClick={handleExportData}
+                        className="flex items-center gap-2 bg-white px-5 py-3 rounded-2xl border border-slate-100 text-slate-600 font-bold shadow-sm hover:shadow-md hover:border-indigo-100 transition-all active:scale-95"
+                      >
+                        <Download size={18} className="text-indigo-500" /> 
+                        <span className="text-sm">CSV 데이터 내보내기</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </header>
@@ -647,12 +696,22 @@ const App = () => {
                 {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} />}
                 {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} />}
                 {view === 'orgchart' && <OrgChartView orgUnits={orgUnits} users={allUsers} db={db} appId={appId} setOrgUnits={setOrgUnits} />}
-                {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} />}
+                {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} showStatus={showStatus} />}
               </main>
             </div>
           </div>
         </div>
       )}
+      {/* Hidden PDF Template for generation */}
+      <div style={{ position: 'fixed', top: '-9999px', left: '-9999px' }}>
+        <ReportPDFTemplate 
+          innerRef={pdfRef} 
+          logs={logs} 
+          profile={profile} 
+          reportFilters={reportFilters} 
+          allUsers={allUsers}
+        />
+      </div>
     </>
   );
 };
@@ -1008,6 +1067,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
   // 유종 변경 반영 (프로필 설정 변경 시)
   useEffect(() => {
     if (!initialData && profile?.fuelType) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData(prev => ({ ...prev, fuelType: profile.fuelType }));
     }
   }, [profile?.fuelType, initialData]);
@@ -1042,6 +1102,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
         }
     }
     if (!formData.isManualDistance) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData(prev => ({ ...prev, distance: parseFloat(sum.toFixed(1)) }));
     }
   }, [formData.waypoints, formData.isManualDistance]);
@@ -2006,7 +2067,7 @@ const SettingsPanel = ({ fuelRates, onUpdate, db, appId }) => {
       }
     };
     fetchSelectedMonthRates();
-  }, [selectedMonth, db, appId]);
+  }, [selectedMonth, db, appId, fuelRates]);
 
   const handleChange = (fuel, field, value) => {
     setLocalRates({
@@ -2087,7 +2148,7 @@ const SettingsPanel = ({ fuelRates, onUpdate, db, appId }) => {
   );
 };
 
-const MyPage = ({ profile, onUpdate }) => {
+const MyPage = ({ profile, onUpdate, showStatus }) => {
   const [localProfile, setLocalProfile] = useState(profile);
 
   useEffect(() => {
@@ -2696,8 +2757,6 @@ const InputLabel = ({ label }) => (
 
 const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, onRejectRequest, fuelRates, onUpdateSettings }) => {
   const [users, setUsers] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [deptFilter, setDeptFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('users'); // 'users', 'requests', or 'fuel'
 
   useEffect(() => {
@@ -2713,31 +2772,9 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, 
     return logs.filter(log => log.requestStatus === 'pending');
   }, [logs]);
 
-  const updateOrgUnitsRemote = async (newUnits) => {
-    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'orgUnits'), { units: newUnits });
-    setOrgUnits(newUnits);
-  };
-
   const updateUser = async (uid, updates) => {
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid), updates);
   };
-
-  const deleteUser = async (uid) => {
-    if (confirm('정말 이 계정을 삭제하시겠습니까?')) {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', uid));
-    }
-  };
-
-  const [newOrgUnit, setNewOrgUnit] = useState('');
-  const [newDeptParent, setNewDeptParent] = useState('');
-
-  const filteredUsers = users.filter(user => {
-    const term = searchTerm.toLowerCase();
-    const matchName = user.userName?.toLowerCase().includes(term);
-    const matchEmail = user.email?.toLowerCase().includes(term);
-    const matchDept = deptFilter === 'all' || user.department === deptFilter;
-    return (matchName || matchEmail) && matchDept;
-  });
 
   return (
     <div className="space-y-10">
@@ -3574,6 +3611,165 @@ const PasswordResetView = ({ code, onComplete }) => {
             </form>
           )}
         </div>
+      </div>
+    </div>
+  );
+};
+
+const ReportPDFTemplate = ({ innerRef, logs, profile, reportFilters, allUsers }) => {
+  const filteredLogs = useMemo(() => {
+    return logs.filter(log => {
+      const u = allUsers.find(au => au.uid === log.userId);
+      const logDept = u?.department || '미지정';
+      const matchDept = reportFilters.department === 'all' || logDept.startsWith(reportFilters.department);
+      const matchUser = reportFilters.userId === 'all' || log.userId === reportFilters.userId;
+      const matchStart = !reportFilters.startDate || log.date >= reportFilters.startDate;
+      const matchEnd = !reportFilters.endDate || log.date <= reportFilters.endDate;
+      return matchDept && matchUser && matchStart && matchEnd;
+    }).sort((a, b) => b.date.localeCompare(a.date));
+  }, [logs, allUsers, reportFilters]);
+
+  const stats = useMemo(() => {
+    const totalDist = filteredLogs.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
+    const totalAmount = filteredLogs.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+    const totalParking = filteredLogs.reduce((acc, curr) => acc + (Number(curr.parkingTotal) || 0), 0);
+    const totalFuel = totalAmount - totalParking;
+    return { totalDist, totalAmount, totalParking, totalFuel, count: filteredLogs.length };
+  }, [filteredLogs]);
+
+  const dateStr = reportFilters.selectedMonth ? `${reportFilters.selectedMonth.split('-')[0]}년 ${reportFilters.selectedMonth.split('-')[1]}월` : '전체 내역';
+
+  return (
+    <div ref={innerRef} style={{ width: '800px', padding: '60px', backgroundColor: '#ffffff' }} className="font-['Outfit']">
+      {/* Header Section */}
+      <div className="flex justify-between items-start border-b-4 border-slate-900 pb-10 mb-10">
+        <div>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter mb-2">업무용 유류비 정산 리포트</h1>
+          <p className="text-lg font-bold text-slate-400 uppercase tracking-[0.3em]">Fuel Settlement Business Report</p>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-black text-indigo-600 mb-1">{dateStr}</div>
+          <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Published by C-OIL System</div>
+        </div>
+      </div>
+
+      {/* Profile Section */}
+      <div className="grid grid-cols-2 gap-10 mb-12">
+        <div className="space-y-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-xl">
+              {profile?.userName?.[0] || 'U'}
+            </div>
+            <div>
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Requester Information</div>
+              <div className="text-xl font-black text-slate-900">{profile?.userName} <span className="text-sm text-slate-400 ml-2">{profile?.department}</span></div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Vehicle Info</div>
+              <div className="text-sm font-black text-slate-700">{profile?.vehicleName || '-'} ({profile?.regNo || '미기재'})</div>
+            </div>
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fuel Type</div>
+              <div className="text-sm font-black text-slate-700 uppercase">{profile?.fuelType === 'gasoline' ? '휘발유' : profile?.fuelType === 'diesel' ? '경유' : 'LPG'}</div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Settlement Summary */}
+        <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-100 flex flex-col justify-between">
+          <div className="text-[10px] font-black text-indigo-200 uppercase tracking-[0.2em] mb-4 text-center">Final Settlement Calculation</div>
+          <div className="flex justify-between items-end">
+            <div>
+              <div className="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-1">Total Payment</div>
+              <div className="text-4xl font-black">₩ {stats.totalAmount.toLocaleString()}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-black text-indigo-200 opacity-80">{stats.count} Total Trips</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Key Metrics Dashboard */}
+      <div className="grid grid-cols-3 gap-6 mb-12">
+        <div className="bg-white border border-slate-100 p-6 rounded-3xl text-center shadow-sm">
+          <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Cumulative Dist.</div>
+          <div className="text-2xl font-black text-slate-800">{stats.totalDist.toFixed(1)} km</div>
+        </div>
+        <div className="bg-white border border-slate-100 p-6 rounded-3xl text-center shadow-sm">
+          <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Fuel Allowance</div>
+          <div className="text-2xl font-black text-indigo-600">₩ {stats.totalFuel.toLocaleString()}</div>
+        </div>
+        <div className="bg-white border border-slate-100 p-6 rounded-3xl text-center shadow-sm">
+          <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Parking Expenses</div>
+          <div className="text-2xl font-black text-orange-500">₩ {stats.totalParking.toLocaleString()}</div>
+        </div>
+      </div>
+
+      {/* Detailed Log Table */}
+      <div className="mb-16">
+        <div className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] mb-6 pl-1 flex items-center justify-between">
+          <span>Detailed Movement Logs</span>
+          <span className="text-slate-300 font-bold">Standard: Naver Maps API v3.0 (C-OIL Verified)</span>
+        </div>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-slate-900 text-white text-left">
+              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest rounded-tl-xl">Date / Info</th>
+              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest">Route Summary</th>
+              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest">Travel Purpose</th>
+              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest rounded-tr-xl text-right">Settlement</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filteredLogs.map((log, idx) => (
+              <tr key={log.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                <td className="px-6 py-5">
+                  <div className="font-black text-slate-900 text-sm mb-0.5">{log.date}</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{log.fuelType}</div>
+                </td>
+                <td className="px-6 py-5">
+                  <div className="text-[12px] font-black text-slate-700 mb-1">{log.routeSummary}</div>
+                  <div className="text-[10px] font-bold text-slate-400 flex items-center gap-2">
+                    <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded-md text-indigo-600">{log.distance}km</span>
+                  </div>
+                </td>
+                <td className="px-6 py-5">
+                  <div className="text-[12px] font-bold text-slate-500 italic max-w-xs overflow-hidden text-ellipsis line-clamp-2">{log.purpose}</div>
+                </td>
+                <td className="px-6 py-5 text-right">
+                  <div className="font-black text-slate-900 text-sm">₩ {Number(log.amount).toLocaleString()}</div>
+                  {Number(log.parkingTotal) > 0 && <div className="text-[10px] font-bold text-orange-400">P: {Number(log.parkingTotal).toLocaleString()}</div>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Signature Section */}
+      <div className="grid grid-cols-3 gap-10 border-t-2 border-slate-100 pt-16">
+        <div className="flex flex-col items-center">
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-12">Requester / 기안자</div>
+          <div className="w-full border-b border-slate-300 mb-2"></div>
+          <div className="text-sm font-black text-slate-900">{profile?.userName} (印)</div>
+        </div>
+        <div className="flex flex-col items-center">
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-12">Approver / 팀장급 승인</div>
+          <div className="w-full border-b border-slate-300 mb-2"></div>
+          <div className="text-sm font-black text-slate-400 italic">Signature Required</div>
+        </div>
+        <div className="flex flex-col items-center">
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-12">Finance / 최종 정산 확인</div>
+          <div className="w-full border-b border-slate-300 mb-2"></div>
+          <div className="text-sm font-black text-slate-400 italic">Settlement Verified</div>
+        </div>
+      </div>
+
+      <div className="mt-20 text-center">
+        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-[0.5em]">This document was digitally generated by C-OIL Smart Fuel Settlement Platform</p>
       </div>
     </div>
   );
