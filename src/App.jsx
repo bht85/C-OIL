@@ -3517,37 +3517,37 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, cor
                </div>
              ) : (
                deptStats.map(([dept, data]) => (
-                 <div key={dept} className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 group">
-                   <div className="flex justify-between items-start mb-6">
-                     <div>
-                       <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg mb-3 inline-block">Department</span>
-                       <h5 className="text-xl font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{dept}</h5>
-                     </div>
-                     <div className="text-right">
-                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">총 정산액</span>
-                       <div className="text-2xl font-black text-indigo-600 tracking-tighter">{data.total.toLocaleString()}원</div>
-                     </div>
-                   </div>
-                   <div className="grid grid-cols-3 gap-6 pt-6 border-t border-slate-50">
-                      <div className="bg-slate-50/50 p-4 rounded-2xl">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">운행 거리</p>
-                        <p className="text-base font-black text-slate-900">{data.dist.toFixed(1)}km</p>
+                  <div key={dept} className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 group">
+                    <div className="flex justify-between items-start mb-6">
+                      <div>
+                        <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg mb-3 inline-block">Department</span>
+                        <h5 className="text-xl font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{dept}</h5>
                       </div>
-                      <div className="bg-indigo-50/30 p-4 rounded-2xl">
-                        <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">유류비</p>
-                        <p className="text-base font-black text-slate-900">{data.fuel.toLocaleString()}원</p>
+                      <div className="text-right">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">총 정산액</span>
+                        <div className="text-2xl font-black text-indigo-600 tracking-tighter">{data.total.toLocaleString()}원</div>
                       </div>
-                      <div className="bg-amber-50/30 p-4 rounded-2xl">
-                        <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-2">주차비</p>
-                        <p className="text-base font-black text-slate-900">{data.parking.toLocaleString()}원</p>
-                      </div>
-                   </div>
-                 </div>
-               ))
-             )}
-          </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-6 pt-6 border-t border-slate-50">
+                       <div className="bg-slate-50/50 p-4 rounded-2xl">
+                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">운행 거리</p>
+                         <p className="text-base font-black text-slate-900">{data.dist.toFixed(1)}km</p>
+                       </div>
+                       <div className="bg-indigo-50/30 p-4 rounded-2xl">
+                         <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">유류비</p>
+                         <p className="text-base font-black text-slate-900">{data.fuel.toLocaleString()}원</p>
+                       </div>
+                       <div className="bg-amber-50/30 p-4 rounded-2xl">
+                         <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-2">주차비</p>
+                         <p className="text-base font-black text-slate-900">{data.parking.toLocaleString()}원</p>
+                       </div>
+                    </div>
+                  </div>
+                ))
+              )}
+           </div>
         </div>
-      ) : (
+      ) : activeTab === 'details' ? (
         <div className="premium-card rounded-[2.5rem] overflow-hidden animate-slide-up">
           <div className="p-8 border-b border-slate-100 flex items-center gap-3 bg-slate-50/30">
              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><History size={16} /></div>
@@ -3603,6 +3603,56 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, cor
               )}
             </tbody>
           </table>
+        </div>
+      ) : (
+        <div className="space-y-6 animate-fade-in">
+           <div className="bg-indigo-900 p-10 rounded-[2.5rem] text-white overflow-hidden relative">
+              <div className="relative z-10 max-w-2xl">
+                <h4 className="text-2xl font-black mb-2 tracking-tight">업무용승용차 국세청 제출 서식</h4>
+                <p className="text-indigo-200 font-bold leading-relaxed">
+                  등록된 법인차량별 운행 내역을 국세청 고시 제2016-4호 양식에 맞춰 자동으로 출력합니다. 
+                  별도의 수기 작성 없이 정산 데이터를 바로 활용하세요.
+                </p>
+              </div>
+              <Car size={180} className="absolute -right-20 -bottom-20 text-white/5" />
+           </div>
+
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {corVehicles.map(v => (
+                <div key={v.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
+                   <div className="flex justify-between items-start mb-6">
+                      <span className="bg-slate-100 text-slate-500 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest">{v.registrationNo}</span>
+                      <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-all"><FileText size={16} /></div>
+                   </div>
+                   <h5 className="text-xl font-black text-slate-800 mb-6">{v.modelName}</h5>
+                   <button 
+                     onClick={() => exportOfficialPDF(v)}
+                     className="w-full bg-slate-50 group-hover:bg-indigo-600 group-hover:text-white group-hover:shadow-xl group-hover:shadow-indigo-100 py-4 rounded-2xl font-black text-sm text-slate-600 transition-all flex items-center justify-center gap-2"
+                   >
+                     공식 양식 PDF 출력
+                   </button>
+                </div>
+              ))}
+              {corVehicles.length === 0 && (
+                <div className="col-span-full py-20 text-center bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200 text-slate-300 font-bold italic">
+                  등록된 법인차량이 없습니다. 관리자 패널에서 법인차량을 먼저 등록해 주세요.
+                </div>
+              )}
+           </div>
+
+           {/* Hidden Template for PDF Capture */}
+           <div style={{ position: 'fixed', top: '-9999px', left: '-9999px' }}>
+              {selectedCarForReport && (
+                <OfficialCorporateLogTemplate 
+                  innerRef={officialReportRef}
+                  car={selectedCarForReport}
+                  logs={logs}
+                  profile={profile}
+                  year={filters.selectedMonth?.split('-')[0]}
+                  month={filters.selectedMonth?.split('-')[1]}
+                />
+              )}
+           </div>
         </div>
       )}
     </div>
