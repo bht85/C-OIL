@@ -140,6 +140,31 @@ const App = () => {
     selectedMonth: new Date().toISOString().slice(0, 7)
   });
 
+  // 현재 사용자 프로필 실시간 동기화 및 상태 체크 (퇴사자 차단 등)
+  useEffect(() => {
+    if (!user) {
+      setProfile(null);
+      return;
+    }
+    
+    const profileRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid);
+    const unsubscribe = onSnapshot(profileRef, snap => {
+      if (snap.exists()) {
+        const profileData = snap.data();
+        if (profileData.status === 'disabled') {
+          showStatus("인사 처리에 의해 계정이 비활성화되었습니다. (퇴사 등 관리자 조치)", "error");
+          signOut(auth);
+          setUser(null);
+          setProfile(null);
+          return;
+        }
+        setProfile(profileData);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user, db, appId]);
+
   useEffect(() => {
     if (!user || profile?.role !== 'admin') return;
     
@@ -171,6 +196,14 @@ const App = () => {
         
         if (userDoc.exists()) {
           const existingProfile = userDoc.data();
+          if (existingProfile.status === 'disabled') {
+            showStatus("인사 처리에 의해 비활성화된 계정입니다. (퇴직 등)", "error");
+            await signOut(auth);
+            setUser(null);
+            setProfile(null);
+            setLoading(false);
+            return;
+          }
           setProfile(existingProfile);
           // 기존 사용자인데 차량/유종 미입력 시 내 정보 화면으로 이동
           if (!existingProfile.vehicleName || !existingProfile.fuelType) {
@@ -591,7 +624,7 @@ const App = () => {
                     <span className="text-[11px] font-black text-indigo-500 uppercase tracking-[0.3em]">SYSTEM › {view.toUpperCase()}</span>
                   </div>
                   <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-                    {view === 'dashboard' ? '대시보드' : view === 'log' ? '신규 운행 내역' : view === 'history' ? '정산 및 내역' : view === 'reports' ? '통계 리포트' : view === 'admin' ? '인사 관리' : view === 'orgchart' ? '조직도 안내' : '내 프로필'}
+                    {view === 'dashboard' ? '대시보드' : view === 'log' ? (editingLog ? '운행 내역 수정' : '신규 운행 내역') : view === 'history' ? '정산 및 내역' : view === 'reports' ? '통계 리포트' : view === 'admin' ? '인사 관리' : view === 'orgchart' ? '조직도 안내' : '내 프로필'}
                   </h1>
                 </div>
                 <div className="flex items-center gap-3">
@@ -860,52 +893,61 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
     isManualDistance: initialData ? true : false // 수정 중일 때는 기존 거리를 보존하기 위해 수동 모드로 시작
   });
 
-  // 프로필의 기본 유종이 변경되면 폼 데이터도 함께 업데이트
+  // 기존 데이터 로드 시 폼 데이터 초기화 로직 강화
   useEffect(() => {
     if (initialData) {
       setFormData({
         ...initialData,
         date: initialData.date || new Date().toISOString().split('T')[0],
         waypoints: initialData.waypoints || (initialData.routeSummary ? initialData.routeSummary.split(/\s[→>]\s/).map((segment, idx, allSegs) => {
-          const outerMatch = segment.match(/^\[(.*)\]\s(.*)$/);
+          // 더욱 유연한 정규식으로 주소와 정보부 분리
+          const outerMatch = segment.match(/^\[(.*)\]\s*(.*)$/);
           if (outerMatch) {
             let infoPart = outerMatch[1];
             let address = outerMatch[2];
             let purpose = "";
             let parkingFee = 0;
+            let parkingNote = "";
 
-            const pMatch = infoPart.match(/\[P\s?([\d,]+)\]/);
+            // 1. 주차비 정보 추출 (P 또는 🅿️ 아이콘 대응 및 유연한 형식)
+            const pMatch = infoPart.match(/\[(?:P|🅿️)\s?([\d,]+)(?::\s?([^\]]*))?\]/);
             if (pMatch) {
               parkingFee = Number(pMatch[1].replace(/,/g, ''));
-              infoPart = infoPart.replace(/\[P\s?[\d,]+\]/, "").trim();
+              parkingNote = pMatch[2] || "";
+              infoPart = infoPart.replace(/\[(?:P|🅿️).*?\]/, "").trim();
             }
 
+            // 2. 방문 목적 추출 (괄호 안의 내용)
             let alias = infoPart;
-            const purpMatch = alias.match(/\s?\(([^)]+)\)$/);
+            const purpMatch = alias.match(/\(([^)]+)\)/);
             if (purpMatch) {
               purpose = purpMatch[1];
-              alias = alias.replace(/\s?\([^)]+\)$/, "").trim();
+              alias = alias.replace(/\([^)]+\)/, "").trim();
             }
 
+            // 3. 나머지 대괄호 제거하여 순수 별칭 추출
             alias = alias.replace(/[\[\]]/g, "").trim();
 
             return {
-              id: idx === 0 ? 'start' : idx === allSegs.length - 1 ? 'end' : `mid_${idx}`,
+              id: idx === 0 ? 'start' : idx === allSegs.length - 1 ? 'end' : `mid_${idx}_${Date.now()}`,
               label: idx === 0 ? '출발지' : idx === allSegs.length - 1 ? '도착지' : '경유지',
-              alias: alias,
-              purpose: purpose,
+              alias: alias || (idx === 0 ? '출발지' : '도착지'),
+              purpose: purpose || (idx === 0 ? '출발' : '업무'),
               parkingFee: parkingFee,
+              parkingNote: parkingNote,
               address: address,
-              lat: 37.5665, lng: 126.9780 
+              // 좌표 정보가 있다면 유지, 없다면 기본값
+              lat: initialData.waypoints?.[idx]?.lat || 37.5665, 
+              lng: initialData.waypoints?.[idx]?.lng || 126.9780 
             };
           }
           return null;
         }).filter(Boolean) : null) || [
-          { id: 'start', label: '출발지', address: initialData.departure || '', alias: '', purpose: initialData.waypoints?.[0]?.purpose || '출발', lat: 37.5665, lng: 126.9780, parkingFee: 0, parkingNote: '' },
-          { id: 'end', label: '도착지', address: initialData.destination || '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
+          { id: 'start', label: '출발지', address: initialData.departure || '', alias: '출발지', purpose: '출발', lat: initialData.startLat || 37.5665, lng: initialData.startLng || 126.9780, parkingFee: 0, parkingNote: '' },
+          { id: 'end', label: '도착지', address: initialData.destination || '', alias: '도착지', purpose: '업무', lat: initialData.endLat || 37.4979, lng: initialData.endLng || 127.0276, parkingFee: 0, parkingNote: '' }
         ],
         distance: initialData.distance || 0,
-        isManualDistance: initialData.isManualDistance || (initialData.distance > 0 ? true : false) // 기존 거리가 있다면 수동 모드로 우선 보존
+        isManualDistance: initialData.isManualDistance !== undefined ? initialData.isManualDistance : (initialData.distance > 0 ? true : false)
       });
     } else if (profile?.fuelType) {
       setFormData(prev => ({ ...prev, fuelType: profile.fuelType }));
@@ -1370,8 +1412,8 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin }) => {
             : 'bg-slate-100 text-slate-300 cursor-not-allowed'
           }`}
         >
-          <PlusCircle size={22} /> 
-          {formData.distance > 0 ? '기록 완료하기' : '상세 정보를 입력해 주세요'}
+          {initialData ? <Settings size={22} /> : <PlusCircle size={22} />} 
+          {initialData ? '기록 수정 완료하기' : (formData.distance > 0 ? '기록 완료하기' : '상세 정보를 입력해 주세요')}
         </button>
       </form>
 
@@ -2985,10 +3027,16 @@ const OrgChartView = ({ orgUnits, users, db, appId, setOrgUnits, onUpdateUser })
                        </select>
                      </td>
                      <td className="px-8 py-6">
-                        <div className="flex items-center gap-2">
-                           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                           <span className="text-[11px] font-black text-slate-500">정상 활동중</span>
-                        </div>
+                        <select 
+                          className={`text-[9px] font-black px-2 py-1.5 rounded-lg border-none outline-none focus:ring-1 focus:ring-indigo-200 transition-all cursor-pointer uppercase w-full ${
+                            u.status === 'disabled' ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'
+                          }`}
+                          value={u.status || 'approved'}
+                          onChange={(e) => onUpdateUser(u.uid, { status: e.target.value })}
+                        >
+                          <option value="approved">정상 활동</option>
+                          <option value="disabled">사용 중지 (퇴사)</option>
+                        </select>
                      </td>
                    </tr>
                  ))}
