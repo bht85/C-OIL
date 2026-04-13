@@ -55,7 +55,8 @@ import {
   User,
   Calendar,
   X,
-  Star
+  Star,
+  Pencil
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -2881,6 +2882,58 @@ const OrgChartView = ({ orgUnits, users, db, appId, setOrgUnits, onUpdateUser })
     updateOrgUnitsRemote([...orgUnits, newPath]);
   };
 
+  const handleRenameGroup = (e, fullPath) => {
+    e.stopPropagation();
+    const oldName = fullPath.split(' > ').pop();
+    const newName = prompt(`'구 이름 (${oldName})'\n\n새 조직 이름을 입력하세요:`, oldName);
+    if (!newName || newName.trim() === oldName) return;
+    const parentPath = fullPath.split(' > ').slice(0, -1).join(' > ');
+    const newPath = parentPath ? `${parentPath} > ${newName.trim()}` : newName.trim();
+    if (orgUnits.some(u => u === newPath || u.startsWith(newPath + ' > '))) {
+      return alert('이미 존재하는 조직입니다.');
+    }
+    // 해당 조직을 포함하는 모든 units 이름 교체
+    const newUnits = orgUnits.map(u => {
+      if (u === fullPath) return newPath;
+      if (u.startsWith(fullPath + ' > ')) return newPath + u.slice(fullPath.length);
+      return u;
+    });
+    updateOrgUnitsRemote(newUnits);
+    // selectedPath도 업데이트
+    setSelectedPath(prev => prev.map(p => p === oldName ? newName.trim() : p));
+  };
+
+  const handleDeleteGroup = async (e, dept) => {
+    e.stopPropagation();
+    const fullPath = dept.fullPath;
+    // 해당 조직 또는 하위 조직에 소속된 멤버가 있는지 확인
+    const affectedMembers = users.filter(u => 
+      u.department === fullPath || (u.department && u.department.startsWith(fullPath + ' > '))
+    );
+    const affectedUnits = orgUnits.filter(u => u === fullPath || u.startsWith(fullPath + ' > '));
+    
+    let msg = `'${dept.name}' 조직을 삭제하시겠습니까?\n\n- 삭제되는 조직: ${affectedUnits.length}개`;
+    if (affectedMembers.length > 0) {
+      msg += `\n- 영향받는 구성원: ${affectedMembers.length}명 (부서를 '미지정'으로 변경됩니다)`;
+    }
+    
+    if (!window.confirm(msg)) return;
+
+    const newUnits = orgUnits.filter(u => u !== fullPath && !u.startsWith(fullPath + ' > '));
+    await updateOrgUnitsRemote(newUnits);
+
+    // 삭제된 조직의 구성원 부서를 '미지정'으로 변경
+    if (affectedMembers.length > 0 && onUpdateUser) {
+      await Promise.all(affectedMembers.map(m => onUpdateUser(m.uid, { department: '미지정' })));
+    }
+
+    // selectedPath 업데이트
+    setSelectedPath(prev => {
+      const idx = prev.indexOf(dept.name);
+      return idx !== -1 ? prev.slice(0, idx) : prev;
+    });
+  };
+
   const columns = useMemo(() => {
     let current = tree;
     const cols = [{ depts: Object.values(current.children), members: [], parentPath: '' }];
@@ -2941,14 +2994,46 @@ const OrgChartView = ({ orgUnits, users, db, appId, setOrgUnits, onUpdateUser })
                         )}
 
                         {col.depts.map(dept => (
-                          <button 
+                          <div
                             key={dept.name}
+                            className={`group/card relative w-full text-left p-4 rounded-2xl transition-all border cursor-pointer ${
+                              selectedPath[depth] === dept.name 
+                                ? 'bg-indigo-600 border-indigo-600 shadow-lg shadow-indigo-100' 
+                                : 'bg-white border-slate-100 hover:border-indigo-200 hover:shadow-md hover:-translate-y-0.5'
+                            }`}
                             onClick={() => setSelectedPath([...selectedPath.slice(0, depth), dept.name])}
-                            className={`w-full text-left p-4 rounded-2xl transition-all border ${selectedPath[depth] === dept.name ? 'bg-indigo-600 border-indigo-600 shadow-lg shadow-indigo-100' : 'bg-white border-slate-100 hover:border-indigo-200 hover:shadow-md hover:-translate-y-0.5'}`}
                           >
                              <div className="flex items-center justify-between">
-                               <span className={`font-black text-[13px] truncate ${selectedPath[depth] === dept.name ? 'text-white' : 'text-slate-700'}`}>{dept.name}</span>
-                               <ChevronRight size={14} className={selectedPath[depth] === dept.name ? 'text-white/70' : 'text-slate-300'} />
+                               <span className={`font-black text-[13px] truncate pr-2 flex-1 ${selectedPath[depth] === dept.name ? 'text-white' : 'text-slate-700'}`}>{dept.name}</span>
+                               {/* 수정/삭제 버튼 - hover 시 표시 */}
+                               <div 
+                                 className="flex items-center gap-1 opacity-0 group-hover/card:opacity-100 transition-opacity"
+                                 onClick={e => e.stopPropagation()}
+                               >
+                                 <button
+                                   onClick={(e) => handleRenameGroup(e, dept.fullPath)}
+                                   className={`p-1.5 rounded-lg transition-all ${
+                                     selectedPath[depth] === dept.name
+                                       ? 'hover:bg-indigo-500 text-indigo-200 hover:text-white'
+                                       : 'hover:bg-slate-100 text-slate-300 hover:text-indigo-500'
+                                   }`}
+                                   title="조직 이름 변경"
+                                 >
+                                   <Pencil size={12} />
+                                 </button>
+                                 <button
+                                   onClick={(e) => handleDeleteGroup(e, dept)}
+                                   className={`p-1.5 rounded-lg transition-all ${
+                                     selectedPath[depth] === dept.name
+                                       ? 'hover:bg-red-500 text-indigo-200 hover:text-white'
+                                       : 'hover:bg-red-50 text-slate-300 hover:text-red-500'
+                                   }`}
+                                   title="조직 삭제"
+                                 >
+                                   <Trash2 size={12} />
+                                 </button>
+                               </div>
+                               <ChevronRight size={14} className={`ml-1 flex-shrink-0 ${selectedPath[depth] === dept.name ? 'text-white/70' : 'text-slate-300'}`} />
                              </div>
                              <div className="flex gap-3 mt-2">
                                <div className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-tight ${selectedPath[depth] === dept.name ? 'text-indigo-100' : 'text-slate-400'}`}>
@@ -2958,7 +3043,7 @@ const OrgChartView = ({ orgUnits, users, db, appId, setOrgUnits, onUpdateUser })
                                  <Users size={10} /> {dept.members.length}
                                </div>
                              </div>
-                          </button>
+                          </div>
                         ))}
 
                         {col.members.length > 0 && (
