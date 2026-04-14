@@ -2741,6 +2741,7 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
               <NavItem isCollapsed={isCollapsed} icon={<Users />} label="인사/조직 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} disabled={profileIncomplete} badge={pendingRequestsCount} />
             </>
           )}
+          {/* [HIDDEN] 개인 데이터가 없으므로 백업/복구 버튼 숨김 처리
           {isAdmin && (
             <div className={`mt-4 pt-4 border-t border-slate-50 flex flex-col gap-1.5 ${isCollapsed ? 'items-center' : 'px-1'}`}>
               <button 
@@ -2758,6 +2759,7 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
               </label>
             </div>
           )}
+          */}
           <div className="flex-1 min-h-[0.5rem]"></div>
           <NavItem isCollapsed={isCollapsed} icon={<UserCircle />} label="내 정보" active={currentView === 'profile'} onClick={() => onNavigate('profile')} />
           <button
@@ -3109,7 +3111,7 @@ const InputLabel = ({ label }) => (
 
   const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, onRejectRequest, fuelRates, onUpdateSettings, corVehicles, onExport, onImport }) => {
   const [users, setUsers] = useState([]);
-  const [activeTab, setActiveTab] = useState('migrate'); // 기본 탭을 'migrate'로 변경
+  const [activeTab, setActiveTab] = useState('users'); // 기본 탭을 'users'로 변경 (migrate 숨김)
 
   useEffect(() => {
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
@@ -3131,12 +3133,14 @@ const InputLabel = ({ label }) => (
   return (
     <div className="space-y-10">
       <div className="flex flex-wrap gap-4 p-2 bg-white rounded-[2rem] w-fit border border-slate-100 shadow-sm">
+        {/* [HIDDEN] 데이터 이전 탭 숨김 처리
         <button 
           onClick={() => setActiveTab('migrate')}
           className={`px-8 py-4 rounded-2xl font-black text-sm transition-all flex items-center gap-3 ${activeTab === 'migrate' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
         >
           <RefreshCw size={16} /> 데이터 이전
         </button>
+        */}
         <button 
           onClick={() => setActiveTab('users')}
           className={`px-8 py-4 rounded-2xl font-black text-sm transition-all ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
