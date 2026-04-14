@@ -134,10 +134,7 @@ const isValidDistance = (d) => {
 
 const formatOrgUnitLabel = (name) => {
   if (!name) return '';
-  const parts = String(name).split(' > ');
-  const depth = parts.length - 1;
-  if (depth <= 0) return name;
-  return '\u00A0\u00A0'.repeat(depth) + 'ㄴ ' + parts[parts.length - 1];
+  return name;
 };
 
 const App = () => {
