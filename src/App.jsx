@@ -59,6 +59,26 @@ import {
   Pencil,
   Check
 } from 'lucide-react';
+
+const ComposeLogo = ({ size = 24, className = "" }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 100 100" 
+    fill="none" 
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <circle cx="50" cy="50" r="50" fill="#F9D731" />
+    <path 
+      d="M75 50C75 63.8071 63.8071 75 50 75C36.1929 75 25 63.8071 25 50C25 36.1929 36.1929 25 50 25C59.5 25 67.5 30.5 71.5 38" 
+      stroke="#1A1A1A" 
+      strokeWidth="12" 
+      strokeLinecap="round" 
+    />
+    <circle cx="50" cy="50" r="8" fill="#1A1A1A" />
+  </svg>
+);
 import { 
   BarChart, 
   Bar, 
@@ -844,11 +864,11 @@ const App = () => {
       )}
 
       {loading ? (
-        <div className="h-screen flex flex-col items-center justify-center gap-4">
-          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-200 animate-pulse">
-            <Car size={24} strokeWidth={3} />
+        <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-50">
+          <div className="w-16 h-16 bg-[#1A1A1A] rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-yellow-100/20 animate-pulse">
+            <ComposeLogo size={32} />
           </div>
-          <p className="font-black text-slate-300 text-sm tracking-widest">LOADING...</p>
+          <p className="font-extrabold text-slate-800 text-[10px] tracking-[0.3em] uppercase">COMPOSE COFFEE</p>
         </div>
       ) : authAction === 'resetPassword' ? (
         <PasswordResetView code={resetCode} onComplete={() => { setAuthAction(null); window.history.replaceState({}, document.title, window.location.pathname); }} />
@@ -873,8 +893,8 @@ const App = () => {
             {/* Mobile TopBar */}
             <div className="lg:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center justify-between px-4 h-14 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-indigo-200">
-                  <Car size={16} strokeWidth={3} />
+                <div className="w-9 h-9 bg-[#1A1A1A] rounded-xl flex items-center justify-center text-white shadow-lg overflow-hidden">
+                  <ComposeLogo size={20} />
                 </div>
                 <div>
                   <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest leading-none">C-OIL</p>
@@ -963,6 +983,7 @@ const App = () => {
 };
 
 // --- Sub-Components ---
+
 
 const NavItem = ({ icon, label, active, onClick, isCollapsed, disabled, badge }) => (
   <button 
@@ -2479,7 +2500,7 @@ const MyPage = ({ profile, onUpdate, showStatus }) => {
   return (
     <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 max-w-4xl mx-auto animate-fade-in">
       <div className="mb-6 flex items-center gap-5">
-        <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100 shrink-0">
+        <div className="w-14 h-14 bg-[#1A1A1A] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-200 shrink-0">
           <UserCircle size={28} />
         </div>
         <div>
@@ -2509,7 +2530,7 @@ const MyPage = ({ profile, onUpdate, showStatus }) => {
              </div>
              <button 
                onClick={openHomeSearch}
-               className="bg-indigo-600 text-white px-4 py-3 rounded-xl font-black hover:bg-indigo-700 transition-all text-xs shadow-md shadow-indigo-100"
+               className="bg-[#1A1A1A] text-white px-4 py-3 rounded-xl font-black hover:bg-black transition-all text-xs shadow-md shadow-slate-200"
              >
                주소 검색
              </button>
@@ -2688,15 +2709,17 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
     <>
       {/* Desktop Sidebar */}
       <nav className={`hidden lg:flex fixed top-0 left-0 ${isCollapsed ? 'w-20' : 'w-72'} bg-white border-r border-slate-100 flex-col p-6 z-50 transition-all duration-500 ease-in-out overflow-y-auto h-full scrollbar-none`}>
-        <div className={`flex items-center ${isCollapsed ? 'justify-center mb-5' : 'justify-between mb-6 px-2'}`}>
+        <div className={`flex items-center ${isCollapsed ? 'justify-center mb-5' : 'justify-between mb-8 px-2'}`}>
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100 shrink-0">
-              <Car size={20} strokeWidth={3} />
+            <div className="w-11 h-11 bg-[#1A1A1A] rounded-2xl flex items-center justify-center text-white shadow-2xl shadow-yellow-100/10 shrink-0 group-hover:scale-105 transition-transform duration-500 overflow-hidden">
+              <ComposeLogo size={24} />
             </div>
             {!isCollapsed && (
               <div className="animate-fade-in">
-                <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">C-OIL</h1>
-                <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none mt-1">Platform</p>
+                <h1 className="text-base font-black tracking-tight text-slate-900 leading-none">
+                  COMPOSE <span className="text-indigo-600">OIL</span>
+                </h1>
+                <p className="text-[9px] font-bold text-slate-400 tracking-[0.1em] uppercase mt-1.5 opacity-60">Management System</p>
               </div>
             )}
           </div>
@@ -2899,8 +2922,9 @@ const AuthScreen = ({ onLogin, onSignup, onResetPassword, orgUnits: initialOrgUn
                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200">System v2.4.0</span>
             </div>
             
-            <div className="w-[100px] h-[100px] bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mb-12 shadow-2xl shadow-indigo-500/30 border border-indigo-400/30">
-              <Car size={50} className="text-white" strokeWidth={2.5} />
+            <div className="w-[120px] h-[120px] bg-[#1A1A1A] rounded-[3rem] flex items-center justify-center mb-12 shadow-2xl shadow-yellow-500/10 border border-white/5 group relative overflow-hidden">
+               <div className="absolute inset-0 bg-gradient-to-tr from-yellow-500/10 to-transparent"></div>
+               <ComposeLogo size={64} className="relative z-10" />
             </div>
             
             <h2 className="text-5xl lg:text-7xl font-black tracking-tight leading-[1.05] mb-8">
