@@ -106,7 +106,7 @@ const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 // [SEC] 마스터 어드민 목록은 환경변수 또는 서버사이드 Firestore Custom Claims로 관리 권장
 // 클라이언트 노출을 최소화하기 위해 해시 비교 처리
-const _MA = ['esc913@composecoffee.co.kr', 'choihy@composecoffee.co.kr', 'jang_sw@composecoffee.co.kr'];
+const _MA = ['esc913@composecoffee.co.kr', 'choihy@composecoffee.co.kr', 'jang_sw@composecoffee.co.kr', 'esc913@compose.co.kr', 'choihy@compose.co.kr'];
 const isMasterAdmin = (email) => email && _MA.includes(email.toLowerCase());
 
 // [SEC] Production 환경에서는 console 출력 억제
@@ -254,6 +254,11 @@ const App = () => {
         }
         setProfile(profileData);
       }
+    }, err => {
+      secureLog.error('profile snapshot error:', err);
+      if (err.code === 'permission-denied') {
+        showStatus("프로필 정보를 가져오는 데 실패했습니다. 권한을 확인해 주세요.", "error");
+      }
     });
     return () => unsubscribe();
   }, [user]);
@@ -264,6 +269,8 @@ const App = () => {
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
     const unsubscribe = onSnapshot(q, (snap) => {
       setAllUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, err => {
+      secureLog.error('users snapshot error:', err);
     });
 
     // 조직 구성 정보 실시간 동기화 (App 레벨로 이동)
@@ -272,12 +279,16 @@ const App = () => {
       if (snap.exists()) {
         setOrgUnits(snap.data().units || ['본사', '연구소', '영업부', '현장']);
       }
+    }, err => {
+      secureLog.error('org snapshot error:', err);
     });
 
     // 법인차량 목록 동기화
     const corRef = query(collection(db, 'artifacts', appId, 'public', 'data', 'corporateVehicles'));
     const unsubscribeCor = onSnapshot(corRef, (snap) => {
       setCorVehicles(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, err => {
+      secureLog.error('corporate vehicles snapshot error:', err);
     });
 
     return () => {
@@ -289,51 +300,61 @@ const App = () => {
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
-      if (u) {
-        setUser(u);
-        const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', u.uid);
-        const userDoc = await getDoc(userDocRef);
-        
-        if (userDoc.exists()) {
-          const existingProfile = userDoc.data();
-          if (existingProfile.status === 'disabled') {
-            showStatus("인사 처리에 의해 비활성화된 계정입니다. (퇴직 등)", "error");
-            await signOut(auth);
-            setUser(null);
-            setProfile(null);
-            setLoading(false);
-            return;
-          }
-          setProfile(existingProfile);
-          // 기존 사용자인데 차량/유종 미입력 시 내 정보 화면으로 이동
-          if (!existingProfile.vehicleName || !existingProfile.fuelType) {
-            setIsNewUser(true);
+      try {
+        if (u) {
+          setUser(u);
+          const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', u.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+          if (userDoc.exists()) {
+            const existingProfile = userDoc.data();
+            if (existingProfile.status === 'disabled') {
+              showStatus("인사 처리에 의해 비활성화된 계정입니다. (퇴직 등)", "error");
+              await signOut(auth);
+              setUser(null);
+              setProfile(null);
+              setLoading(false);
+              return;
+            }
+            setProfile(existingProfile);
+            // 기존 사용자인데 차량/유종 미입력 시 내 정보 화면으로 이동
+            if (!existingProfile.vehicleName || !existingProfile.fuelType) {
+              setIsNewUser(true);
+            }
+          } else {
+            const isMaster = isMasterAdmin(u.email);
+
+            const newProfile = {
+              uid: u.uid,
+              email: u.email,
+              userName: u.displayName || '신규 사용자',
+              role: isMaster ? 'admin' : 'staff',
+              status: 'approved', // 자동 승인 신청 시스템으로 변경
+              department: isMaster ? '(주)컴포즈커피 > 경영지원본부 > 인사총무팀' : '미지정',
+              vehicleName: '',
+              fuelType: '',
+              homeAddress: '',
+              homeAlias: '우리집',
+              savedLocations: []
+            };
+            await setDoc(userDocRef, newProfile);
+            setProfile(newProfile);
+            setIsNewUser(true); // 신규 사용자 → 내 정보 화면으로 이동 트리거
           }
         } else {
-          const isMaster = isMasterAdmin(u.email);
-
-          const newProfile = {
-            uid: u.uid,
-            email: u.email,
-            userName: u.displayName || '신규 사용자',
-            role: isMaster ? 'admin' : 'staff',
-            status: 'approved', // 자동 승인 신청 시스템으로 변경
-            department: isMaster ? '(주)컴포즈커피 > 경영지원본부 > 인사총무팀' : '미지정',
-            vehicleName: '',
-            fuelType: '',
-            homeAddress: '',
-            homeAlias: '우리집',
-            savedLocations: []
-          };
-          await setDoc(userDocRef, newProfile);
-          setProfile(newProfile);
-          setIsNewUser(true); // 신규 사용자 → 내 정보 화면으로 이동 트리거
+          setUser(null);
+          setProfile(null);
         }
-      } else {
-        setUser(null);
-        setProfile(null);
+      } catch (err) {
+        secureLog.error('auth check error:', err);
+        if (err.code === 'permission-denied') {
+          showStatus("Firestore 권한이 없습니다. Firebase Console에서 규칙 설정을 확인해 주세요.", "error", 10000);
+        } else {
+          showStatus("인증 확인 중 오류가 발생했습니다: " + err.message, "error");
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribeAuth();
@@ -420,6 +441,11 @@ const App = () => {
           return log.userId === user.uid;
         });
       setLogs(logsData);
+    }, err => {
+      secureLog.error('logs snapshot error:', err);
+      if (err.code === 'permission-denied') {
+        showStatus("운행 내역을 가져오는 데 실패했습니다. 권한 설정을 확인해 주세요.", "error");
+      }
     });
 
     return () => unsubscribeLogs();
