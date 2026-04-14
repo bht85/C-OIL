@@ -88,12 +88,12 @@ const getSafeGlobal = (key, fallback) => {
 // 로컬 개발 시 .env 또는 __firebase_config 전역 주입 권장
 const rawConfig = getSafeGlobal('__firebase_config', null);
 const firebaseConfig = rawConfig ? (typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig) : {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyANXx1Wj4EGnwWsF8W2CrkC1pzojXXusA8",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "c-oil-b880b.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "c-oil-b880b",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "c-oil-b880b.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "185616673355",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:185616673355:web:1b01544ed887d766cf3bce"
+  apiKey: "AIzaSyBElhvMeXAuUkyWf6r0volTumE2LRcxggQ",
+  authDomain: "compose-oil.firebaseapp.com",
+  projectId: "compose-oil",
+  storageBucket: "compose-oil.firebasestorage.app",
+  messagingSenderId: "319952705434",
+  appId: "1:319952705434:web:63b7bc10aa96d2ad258c23"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -170,6 +170,69 @@ const App = () => {
   const [corVehicles, setCorVehicles] = useState([]);
 
   const pdfRef = useRef(null);
+
+  // --- 마이그레이션 유틸리티 ---
+  const handleNativeExport = async () => {
+    try {
+      showStatus("데이터를 수집 중입니다. 잠시만 기다려 주세요...", "info");
+      const data = {};
+      const paths = {
+        profiles: `artifacts/${appId}/public/data/profiles`,
+        logs: `artifacts/${appId}/public/data/logs`,
+        corporateVehicles: `artifacts/${appId}/public/data/corporateVehicles`,
+        fuelRates: `artifacts/${appId}/public/data/fuelRates`,
+        orgUnits: `artifacts/${appId}/public/data/settings/orgUnits`
+      };
+
+      for (const [key, path] of Object.entries(paths)) {
+        if (key === 'orgUnits') {
+          const snap = await getDoc(doc(db, path));
+          if (snap.exists()) data[key] = snap.data();
+        } else {
+          const snap = await getDocs(collection(db, path));
+          data[key] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
+      }
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `C_OIL_DATA_BACKUP_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      showStatus("백업 파일이 생성되었습니다! 법인 계정으로 바꾼 뒤 [데이터 복구] 버튼을 눌러주세요.");
+    } catch (e) {
+      console.error(e);
+      showStatus("백업 실패: " + e.message, "error");
+    }
+  };
+
+  const handleNativeImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        const batch = writeBatch(db);
+        showStatus("법인 계정으로 데이터를 전송 중입니다...", "info");
+        
+        if (data.profiles) data.profiles.forEach(p => { const { id, ...rest } = p; batch.set(doc(db, `artifacts/${appId}/public/data/profiles`, id), rest); });
+        if (data.logs) data.logs.forEach(l => { const { id, ...rest } = l; batch.set(doc(db, `artifacts/${appId}/public/data/logs`, id), rest); });
+        if (data.corporateVehicles) data.corporateVehicles.forEach(v => { const { id, ...rest } = v; batch.set(doc(db, `artifacts/${appId}/public/data/corporateVehicles`, id), rest); });
+        if (data.fuelRates) data.fuelRates.forEach(r => { const { id, ...rest } = r; batch.set(doc(db, `artifacts/${appId}/public/data/fuelRates`, id), rest); });
+        if (data.orgUnits) batch.set(doc(db, `artifacts/${appId}/public/data/settings/orgUnits`), data.orgUnits);
+
+        await batch.commit();
+        showStatus("🎉 마이그레이션 성공! 모든 데이터가 법인 계정으로 이전되었습니다.");
+      } catch (err) {
+        console.error(err);
+        showStatus("복구 실패: " + err.message, "error");
+      }
+    };
+    reader.readAsText(file);
+  };
 
   // 현재 사용자 프로필 실시간 동기화 및 상태 체크 (퇴사자 차단 등)
   useEffect(() => {
@@ -780,6 +843,8 @@ const App = () => {
             onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             setEditingLog={setEditingLog}
             pendingRequestsCount={logs.filter(log => log.requestStatus === 'pending').length}
+            onExport={handleNativeExport}
+            onImport={handleNativeImport}
           />
           <div className={`flex-1 transition-all duration-500 ease-in-out ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-72'} min-h-screen flex flex-col`}>
             {/* Mobile TopBar */}
@@ -852,7 +917,7 @@ const App = () => {
                 {view === 'log' && <LogEntryForm key={editingLog?.id || 'new'} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} corVehicles={corVehicles} />}
                 {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} isAdmin={isAdmin} onRequestCorrection={requestCorrection} onUpdateLog={saveLog} onEdit={(log) => { setEditingLog(log); setView('log'); }} />}
                 {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} corVehicles={corVehicles} profile={profile} />}
-                {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} />}
+                {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} onExport={handleNativeExport} onImport={handleNativeImport} />}
                 {view === 'orgchart' && <OrgChartView orgUnits={orgUnits} users={allUsers} db={db} appId={appId} setOrgUnits={setOrgUnits} />}
                 {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} showStatus={showStatus} />}
               </main>
@@ -2576,7 +2641,7 @@ const MyPage = ({ profile, onUpdate, showStatus }) => {
 
 // --- Enhanced Components ---
 
-const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCollapsed, onToggle, setEditingLog, pendingRequestsCount }) => {
+const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCollapsed, onToggle, setEditingLog, pendingRequestsCount, onExport, onImport }) => {
   const profileIncomplete = !userProfile?.vehicleName || !userProfile?.fuelType;
   return (
     <>
@@ -2650,7 +2715,24 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
               <NavItem isCollapsed={isCollapsed} icon={<Users />} label="인사/조직 관리" active={currentView === 'admin'} onClick={() => onNavigate('admin')} disabled={profileIncomplete} badge={pendingRequestsCount} />
             </>
           )}
-          <div className="flex-1 min-h-[1.5rem]"></div>
+          {isAdmin && (
+            <div className={`mt-4 pt-4 border-t border-slate-50 flex flex-col gap-1.5 ${isCollapsed ? 'items-center' : 'px-1'}`}>
+              <button 
+                onClick={onExport}
+                className={`flex items-center ${isCollapsed ? 'justify-center w-10 h-10' : 'gap-3 px-5 py-3'} rounded-2xl text-[11px] font-black text-indigo-600 bg-indigo-50/50 hover:bg-indigo-600 hover:text-white transition-all`}
+                title="데이터 백업 (JSON)"
+              >
+                <Download size={16} />
+                {!isCollapsed && <span>데이터 백업</span>}
+              </button>
+              <label className={`flex items-center cursor-pointer ${isCollapsed ? 'justify-center w-10 h-10' : 'gap-3 px-5 py-3'} rounded-2xl text-[11px] font-black text-emerald-600 bg-emerald-50/50 hover:bg-emerald-600 hover:text-white transition-all`}>
+                <RefreshCw size={16} />
+                {!isCollapsed && <span>데이터 복구</span>}
+                <input type="file" accept=".json" onChange={onImport} className="hidden" />
+              </label>
+            </div>
+          )}
+          <div className="flex-1 min-h-[0.5rem]"></div>
           <NavItem isCollapsed={isCollapsed} icon={<UserCircle />} label="내 정보" active={currentView === 'profile'} onClick={() => onNavigate('profile')} />
           <button
             onClick={onLogout}
@@ -2999,9 +3081,9 @@ const InputLabel = ({ label }) => (
   </label>
 );
 
-const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, onRejectRequest, fuelRates, onUpdateSettings, corVehicles }) => {
+  const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, onRejectRequest, fuelRates, onUpdateSettings, corVehicles, onExport, onImport }) => {
   const [users, setUsers] = useState([]);
-  const [activeTab, setActiveTab] = useState('users'); // 'users', 'requests', or 'fuel'
+  const [activeTab, setActiveTab] = useState('migrate'); // 기본 탭을 'migrate'로 변경
 
   useEffect(() => {
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
@@ -3023,6 +3105,12 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, 
   return (
     <div className="space-y-10">
       <div className="flex flex-wrap gap-4 p-2 bg-white rounded-[2rem] w-fit border border-slate-100 shadow-sm">
+        <button 
+          onClick={() => setActiveTab('migrate')}
+          className={`px-8 py-4 rounded-2xl font-black text-sm transition-all flex items-center gap-3 ${activeTab === 'migrate' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+        >
+          <RefreshCw size={16} /> 데이터 이전
+        </button>
         <button 
           onClick={() => setActiveTab('users')}
           className={`px-8 py-4 rounded-2xl font-black text-sm transition-all ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
@@ -3119,6 +3207,45 @@ const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, 
       )}
       {activeTab === 'fuel' && <SettingsPanel fuelRates={fuelRates} onUpdate={onUpdateSettings} db={db} appId={appId} />}
       {activeTab === 'corporate' && <CorporateVehicleManager corVehicles={corVehicles} users={users} db={db} appId={appId} />}
+      {activeTab === 'migrate' && (
+        <div className="bg-white p-12 rounded-[3.5rem] shadow-sm border border-slate-100 animate-fade-in text-center">
+          <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl shadow-indigo-50">
+            <RefreshCw size={40} />
+          </div>
+          <h3 className="text-3xl font-black text-slate-900 mb-4">데이터 마이그레이션 도구</h3>
+          <p className="text-slate-500 font-bold mb-12 max-w-xl mx-auto leading-relaxed">
+            현재 파이어베이스(개인)의 모든 데이터(조직도, 운행기록, 프로필 등)를 백업하여 법인 계정으로 옮길 수 있습니다.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+            <div className="bg-slate-50 p-10 rounded-[2.5rem] border border-slate-100 hover:border-indigo-200 transition-all group text-left">
+               <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 mb-6 shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                  <Download size={24} />
+               </div>
+               <h4 className="text-xl font-black text-slate-800 mb-2">1단계: 현재 데이터 백업</h4>
+               <p className="text-xs font-bold text-slate-400 mb-8 leading-snug">모든 데이터를 JSON 파일로 다운로드하여 로컬에 저장합니다.</p>
+               <button 
+                 onClick={onExport}
+                 className="w-full bg-white border-2 border-indigo-600 text-indigo-600 py-4 rounded-2xl font-black hover:bg-indigo-600 hover:text-white transition-all shadow-lg shadow-indigo-50"
+               >
+                 백업 시작 (Download)
+               </button>
+            </div>
+
+            <div className="bg-slate-50 p-10 rounded-[2.5rem] border border-slate-100 hover:border-emerald-200 transition-all group text-left">
+               <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-emerald-600 mb-6 shadow-sm group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                  <RefreshCw size={24} />
+               </div>
+               <h4 className="text-xl font-black text-slate-800 mb-2">2단계: 데이터 복구</h4>
+               <p className="text-xs font-bold text-slate-400 mb-8 leading-snug">법인 계정으로 전환된 후, 백업 파일을 올려 데이터를 복원합니다.</p>
+               <label className="block w-full bg-emerald-600 text-white py-4 rounded-2xl font-black hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-50 cursor-pointer text-center">
+                 파일 선택 및 복구 시작
+                 <input type="file" accept=".json" onChange={onImport} className="hidden" />
+               </label>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
