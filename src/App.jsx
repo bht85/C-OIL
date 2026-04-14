@@ -1422,7 +1422,10 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
           applyFallbackCoords(index, fullAddress);
         }
       }
-    }).open();
+    }).open({
+      left: Math.ceil((window.screen.width - 500) / 2),
+      top: Math.ceil((window.screen.height - 600) / 2)
+    });
   };
 
   const applyFallbackCoords = (index, fullAddress) => {
@@ -2467,7 +2470,10 @@ const MyPage = ({ profile, onUpdate, showStatus }) => {
           }));
         }
       }
-    }).open();
+    }).open({
+      left: Math.ceil((window.screen.width - 500) / 2),
+      top: Math.ceil((window.screen.height - 600) / 2)
+    });
   };
 
   return (
@@ -2553,7 +2559,10 @@ const MyPage = ({ profile, onUpdate, showStatus }) => {
                       });
                     }
                   }
-                }).open();
+                }).open({
+                  left: Math.ceil((window.screen.width - 500) / 2),
+                  top: Math.ceil((window.screen.height - 600) / 2)
+                });
               }}
               className="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-600 hover:text-white transition-all uppercase tracking-tighter"
             >
