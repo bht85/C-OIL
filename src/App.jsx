@@ -1555,7 +1555,16 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
 
   return (
     <div className="bg-white rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-      <form onSubmit={handleSubmit} className="divide-y divide-slate-50">
+      <form 
+        onSubmit={handleSubmit} 
+        onKeyDown={(e) => {
+          // 엔터 키 입력 시 즉시 저장되는 것을 방지 (실수 방지 및 버튼 클릭 유도)
+          if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+            e.preventDefault();
+          }
+        }}
+        className="divide-y divide-slate-50"
+      >
         {/* Section 1: 기본 정보 */}
         <div className="p-5 sm:p-10 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
