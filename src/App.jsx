@@ -281,7 +281,7 @@ const App = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!user || profile?.role !== 'admin') return;
+    if (!user || (profile?.role !== 'admin' && profile?.role !== 'manager')) return;
     
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -958,7 +958,7 @@ const App = () => {
               <main className="max-w-7xl">
                 {view === 'dashboard' && <Dashboard logs={logs} profile={profile} users={allUsers} orgUnits={orgUnits} />}
                 {view === 'log' && <LogEntryForm key={editingLog?.id || 'new'} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} corVehicles={corVehicles} />}
-                {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} isAdmin={isAdmin} onRequestCorrection={requestCorrection} onUpdateLog={saveLog} onEdit={(log) => { setEditingLog(log); setView('log'); }} />}
+                {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} isAdmin={isAdmin} onRequestCorrection={requestCorrection} onUpdateLog={saveLog} profile={profile} onEdit={(log) => { setEditingLog(log); setView('log'); }} />}
                 {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} corVehicles={corVehicles} profile={profile} />}
                 {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} onExport={handleNativeExport} onImport={handleNativeImport} />}
                 {view === 'orgchart' && <OrgChartView orgUnits={orgUnits} users={allUsers} db={db} appId={appId} setOrgUnits={setOrgUnits} />}
@@ -1924,21 +1924,58 @@ const InputGroup = ({ label, icon, children }) => (
   </div>
 );
 
-const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit }) => {
+const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, profile }) => {
   const [requestModal, setRequestModal] = useState({ show: false, logId: null, type: 'delete' });
   const [reason, setReason] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [memberFilter, setMemberFilter] = useState('');
+  const [selectedDept, setSelectedDept] = useState('all');
+  const [selectedMember, setSelectedMember] = useState('all');
   const [selectedDateFilter, setSelectedDateFilter] = useState('');
+
+  // 권한에 따른 필터 노출 여부
+  const showFilters = isAdmin || profile?.role === 'manager';
+
+  // 선택된 월에 해당하는 로그들 우선 추출 (필터 옵션 구성을 위함)
+  const filteredByMonth = useMemo(() => {
+    return logs.filter(log => log.date.startsWith(selectedMonth));
+  }, [logs, selectedMonth]);
+
+  // 가용 부서 목록 추출
+  const availableDepts = useMemo(() => {
+    const depts = new Set();
+    filteredByMonth.forEach(log => {
+      if (log.department) depts.add(log.department);
+    });
+    return Array.from(depts).sort();
+  }, [filteredByMonth]);
+
+  // 가용 사용자 목록 추출
+  const availableMembers = useMemo(() => {
+    const mems = new Set();
+    filteredByMonth.forEach(log => {
+      if (selectedDept === 'all' || log.department === selectedDept) {
+        if (log.userName) mems.add(log.userName);
+      }
+    });
+    return Array.from(mems).sort();
+  }, [filteredByMonth, selectedDept]);
+
+  // 부서가 바뀌어 현재 선택된 사용자가 가용 목록에 없으면 초기화
+  useEffect(() => {
+    if (selectedMember !== 'all' && !availableMembers.includes(selectedMember)) {
+      setSelectedMember('all');
+    }
+  }, [availableMembers, selectedMember]);
 
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
       const matchMonth = log.date.startsWith(selectedMonth);
       const matchDate = !selectedDateFilter || log.date === selectedDateFilter;
-      const matchMember = (log.userName || '').toLowerCase().includes(memberFilter.toLowerCase());
-      return matchMonth && matchDate && matchMember;
+      const matchDept = !showFilters || selectedDept === 'all' || log.department === selectedDept;
+      const matchMember = !showFilters || selectedMember === 'all' || log.userName === selectedMember;
+      return matchMonth && matchDate && matchDept && matchMember;
     });
-  }, [logs, selectedMonth, selectedDateFilter, memberFilter]);
+  }, [logs, selectedMonth, selectedDateFilter, selectedDept, selectedMember, showFilters]);
 
   const stats = useMemo(() => {
     const totalDist = filteredLogs.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
@@ -1994,16 +2031,46 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit }) 
               }}
             />
           </div>
-          <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 ring-indigo-50 transition-all flex-1 min-w-[140px]">
-            <Search size={16} className="text-slate-300 shrink-0" />
-            <input 
-              type="text" 
-              placeholder="사용자명 검색"
-              className="bg-transparent font-black text-slate-700 outline-none text-sm placeholder:text-slate-300 w-full"
-              value={memberFilter}
-              onChange={(e) => setMemberFilter(e.target.value)}
-            />
-          </div>
+
+          {showFilters && (
+            <>
+              {/* 팀(부서) 필터 */}
+              <div className="relative flex items-center gap-2 bg-white px-4 py-3 rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 ring-indigo-50 transition-all flex-1 min-w-[160px]">
+                <Network size={16} className="text-indigo-500 shrink-0" />
+                <select 
+                  className="bg-transparent font-black text-slate-700 outline-none cursor-pointer text-sm w-full appearance-none pr-6"
+                  value={selectedDept}
+                  onChange={(e) => {
+                    setSelectedDept(e.target.value);
+                    setSelectedMember('all');
+                  }}
+                >
+                  <option value="all">부서 전체</option>
+                  {availableDepts.map(dept => (
+                    <option key={dept} value={dept}>{dept.split(' > ').pop()}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-4 text-slate-300 pointer-events-none" />
+              </div>
+
+              {/* 사용자 필터 */}
+              <div className="relative flex items-center gap-2 bg-white px-4 py-3 rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 ring-indigo-50 transition-all flex-1 min-w-[160px]">
+                <Users size={16} className="text-indigo-500 shrink-0" />
+                <select 
+                  className="bg-transparent font-black text-slate-700 outline-none cursor-pointer text-sm w-full appearance-none pr-6"
+                  value={selectedMember}
+                  onChange={(e) => setSelectedMember(e.target.value)}
+                >
+                  <option value="all">사용자 전체</option>
+                  {availableMembers.map(member => (
+                    <option key={member} value={member}>{member}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-4 text-slate-300 pointer-events-none" />
+              </div>
+            </>
+          )}
+
           <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-2xl border border-slate-100 shadow-sm focus-within:ring-2 ring-indigo-50 transition-all flex-1 min-w-[160px]">
             <Calendar size={16} className="text-emerald-500 shrink-0" />
             <input 
