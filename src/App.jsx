@@ -187,6 +187,14 @@ const App = () => {
   const [corVehicles, setCorVehicles] = useState([]);
 
   const pdfRef = useRef(null);
+  
+  // 탭 전환 시 스크롤을 최상단으로 자동 이동 (모바일 사용성 개선)
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    // 특정 브라우저/환경에서 컨테이너 스크롤이 남는 경우 대비
+    const mainContainer = document.querySelector('main');
+    if (mainContainer) mainContainer.scrollTop = 0;
+  }, [view]);
 
   // --- 마이그레이션 유틸리티 ---
   const handleNativeExport = async () => {
