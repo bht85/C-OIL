@@ -859,7 +859,7 @@ const App = () => {
   return (
     <>
       {statusMessage && (
-        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[1000] px-5 py-4 rounded-2xl shadow-2xl border animate-slide-up flex items-center gap-3 min-w-[280px] max-w-[92vw] ${
+        <div className={`fixed top-4 inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-[1000] px-5 py-4 rounded-2xl shadow-2xl border animate-slide-up flex items-center gap-3 sm:min-w-[320px] sm:max-w-md ${
           statusMessage.type === 'error' 
             ? 'bg-red-50 text-red-700 border-red-100' 
             : statusMessage.type === 'info'
