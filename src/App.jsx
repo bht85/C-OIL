@@ -456,6 +456,9 @@ const App = () => {
 
     const logsQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), orderBy('date', 'desc'));
     const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
+      // [UI] 데이터를 성공적으로 가져오면 기존의 가져오기 실패 관련 에러 메시지는 제거
+      setStatusMessage(prev => (prev?.msg?.includes("운행 내역") ? null : prev));
+
       const logsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
         .filter(log => {
           // [SEC] 본인 기록은 권한과 관계없이 항상 조회 가능
