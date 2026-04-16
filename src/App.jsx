@@ -450,12 +450,15 @@ const App = () => {
     const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
       const logsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
         .filter(log => {
+          // [SEC] 본인 기록은 권한과 관계없이 항상 조회 가능
+          if (log.userId === user.uid) return true;
+          
           if (profile?.role === 'admin') return true;
           if (profile?.role === 'manager') {
-            // 본인 부서 또는 하위 부서의 내역 모두 조회 가능 (댑스 기반 처리)
-            return (log.department && log.department.startsWith(profile.department)) || log.userId === user.uid;
+            // 본인 부서 또는 하위 부서의 내역 모두 조회 가능 (뎁스 기반 처리)
+            return (log.department && log.department.startsWith(profile.department));
           }
-          return log.userId === user.uid;
+          return false;
         });
       setLogs(logsData);
     }, err => {
@@ -575,6 +578,7 @@ const App = () => {
         distance: Number(logData.distance),              // [SEC] 타입 강제 변환
         amount: Number(logData.amount),
         createdAt: logData.createdAt || new Date().toISOString(),
+        date: logData.date || new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0],
         requestStatus: 'none',
         requestType: null,
         requestReason: null
@@ -1210,11 +1214,12 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
     const assignedVehicle = corVehicles.find(v => v.assignedUser === profile?.uid);
 
     if (!initialData) {
+      const localDate = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
       return {
-        date: new Date().toISOString().split('T')[0],
+        date: localDate,
         waypoints: [
           { id: 'start', label: '출발지', address: '', alias: '', purpose: '출발', lat: 37.5665, lng: 126.9780, parkingFee: 0, parkingNote: '' },
-          { id: 'end', label: '도착지', address: '', alias: '', purpose: '', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
+          { id: 'end', label: '도착지', address: '', alias: '', purpose: '도착', lat: 37.4979, lng: 127.0276, parkingFee: 0, parkingNote: '' }
         ],
         purpose: '',
         fuelType: assignedVehicle ? assignedVehicle.fuelType : (profile?.fuelType || 'gasoline'),
