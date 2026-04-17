@@ -2712,7 +2712,7 @@ const NotificationSettingsPanel = ({ settings, db, appId, showStatus }) => {
             />
           </div>
           <p className="mt-4 text-[11px] text-slate-400 leading-relaxed font-bold">
-            * 팀즈 채널 설정에서 [커넥터] -> [Incoming Webhook]을 추가하여 발급받은 URL을 입력하세요.
+            * 팀즈 채널 설정에서 [커넥터] {"->"} [Incoming Webhook]을 추가하여 발급받은 URL을 입력하세요.
           </p>
         </div>
 
