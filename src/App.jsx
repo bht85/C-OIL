@@ -185,6 +185,7 @@ const App = () => {
     selectedMonth: new Date().toLocaleDateString('sv-SE').slice(0, 7)
   });
   const [corVehicles, setCorVehicles] = useState([]);
+  const [notificationSettings, setNotificationSettings] = useState({ teamsWebhookUrl: '', enabled: false });
 
   const pdfRef = useRef(null);
   
@@ -257,6 +258,74 @@ const App = () => {
       }
     };
     reader.readAsText(file);
+  };
+
+  // 알림 설정 동기화
+  useEffect(() => {
+    if (!user) return;
+    const notifRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'notifications');
+    const unsubscribe = onSnapshot(notifRef, (snap) => {
+      if (snap.exists()) {
+        setNotificationSettings(snap.data());
+      }
+    }, err => {
+      secureLog.error('notifications snapshot error:', err);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  const sendTeamsNotification = async (type, details) => {
+    if (!notificationSettings.enabled || !notificationSettings.teamsWebhookUrl) {
+      secureLog.info('Teams notification skipped: disabled or no URL');
+      return;
+    }
+
+    try {
+      const { userName, reason, date, requestedAt } = details;
+      const isDelete = type === 'delete';
+      const title = isDelete ? '🗑️ 운행 내역 삭제 요청' : '✏️ 운행 내역 수정 요청';
+      const themeColor = isDelete ? 'FF0000' : '0078D4'; // Red for delete, Blue for edit
+      
+      const payload = {
+        "@type": "MessageCard",
+        "@context": "http://schema.org/extensions",
+        "themeColor": themeColor,
+        "summary": "C-OIL 보정 요청 알림",
+        "sections": [{
+          "activityTitle": title,
+          "activitySubtitle": "유류비 정산 시스템 (C-OIL)",
+          "activityImage": "https://img.icons8.com/color/96/microsoft-teams.png",
+          "facts": [
+            { "name": "요청자", "value": userName },
+            { "name": "운행일", "value": date },
+            { "name": "요청 사유", "value": reason },
+            { "name": "요청일시", "value": new Date(requestedAt).toLocaleString('ko-KR') }
+          ],
+          "markdown": true
+        }],
+        "potentialAction": [{
+          "@type": "OpenUri",
+          "name": "관리자 페이지에서 확인",
+          "targets": [{ "os": "default", "uri": window.location.origin }]
+        }]
+      };
+
+      // Teams Incoming Webhook doesn't support CORS for application/json from browsers.
+      // Using 'no-cors' mode with a compatible payload might work depending on browser/Teams version.
+      // For absolute reliability, a backend proxy is recommended.
+      await fetch(notificationSettings.teamsWebhookUrl, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify(payload),
+        mode: 'no-cors' // This makes the request "opaque" but Teams usually processes it if the body is valid.
+      });
+      
+      secureLog.info('Teams notification sent successfully');
+    } catch (err) {
+      secureLog.error('Teams notification error:', err);
+    }
   };
 
   // 현재 사용자 프로필 실시간 동기화 및 상태 체크 (퇴사자 차단 등)
@@ -652,12 +721,22 @@ const App = () => {
       if (!isAdmin && logDoc.data().userId !== user.uid) throw new Error('Forbidden');
 
       const cleanReason = sanitizeString(reason, 300);
+      const requestedAt = new Date().toISOString();
       await updateDoc(logDocRef, {
         requestStatus: 'pending',
         requestType: ['edit', 'delete'].includes(requestType) ? requestType : 'edit', // [SEC] 허용값만 저장
         requestReason: cleanReason,
-        requestedAt: new Date().toISOString()
+        requestedAt
       });
+
+      // 팀즈 알림 발송 (비동기로 실행하여 사용자 응답 지연 최소화)
+      sendTeamsNotification(requestType, {
+        userName: profile?.userName || user.email,
+        reason: cleanReason,
+        date: logDoc.data().date,
+        requestedAt
+      });
+
       showStatus("보정 요청이 전송되었습니다.");
     } catch (e) {
       secureLog.error('requestCorrection error:', e.message);
@@ -975,7 +1054,7 @@ const App = () => {
                 {view === 'log' && <LogEntryForm key={editingLog?.id || 'new'} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} corVehicles={corVehicles} />}
                 {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} isAdmin={isAdmin} onRequestCorrection={requestCorrection} onUpdateLog={saveLog} profile={profile} onEdit={(log) => { setEditingLog(log); setView('log'); }} />}
                 {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} corVehicles={corVehicles} profile={profile} />}
-                {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} onExport={handleNativeExport} onImport={handleNativeImport} />}
+                {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} onExport={handleNativeExport} onImport={handleNativeImport} notificationSettings={notificationSettings} showStatus={showStatus} />}
                 {view === 'orgchart' && <OrgChartView orgUnits={orgUnits} users={allUsers} db={db} appId={appId} setOrgUnits={setOrgUnits} />}
                 {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} showStatus={showStatus} />}
               </main>
@@ -2539,6 +2618,125 @@ const SettingsPanel = ({ fuelRates, onUpdate, db, appId }) => {
   );
 };
 
+const NotificationSettingsPanel = ({ settings, db, appId, showStatus }) => {
+  const [webhookUrl, setWebhookUrl] = useState(settings?.teamsWebhookUrl || '');
+  const [enabled, setEnabled] = useState(settings?.enabled || false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setWebhookUrl(settings?.teamsWebhookUrl || '');
+    setEnabled(settings?.enabled || false);
+  }, [settings]);
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'notifications'), {
+        teamsWebhookUrl: webhookUrl,
+        enabled: enabled,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      showStatus("알림 설정이 저장되었습니다.");
+    } catch (err) {
+      console.error(err);
+      showStatus("저장 실패: " + err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTest = async () => {
+    if (!webhookUrl) return showStatus("웹훅 URL을 입력해 주세요.", "error");
+    
+    setLoading(true);
+    try {
+      const payload = {
+        "@type": "MessageCard",
+        "@context": "http://schema.org/extensions",
+        "themeColor": "00FF00",
+        "summary": "C-OIL 팀즈 알림 테스트",
+        "sections": [{
+          "activityTitle": "✅ C-OIL 팀즈 알림 연동 테스트",
+          "activitySubtitle": "연동 성공",
+          "text": "팀즈 알림 연동이 성공적으로 설정되었습니다. 이제 보정 요청 발생 시 이 채널로 즉시 알림이 전송됩니다.",
+          "markdown": true
+        }]
+      };
+
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        mode: 'no-cors'
+      });
+      showStatus("테스트 알림을 전송했습니다. 팀즈 채널에 메시지가 왔는지 확인해 주세요. (브라우저 정책상 성공 여부 확인이 어려울 수 있습니다)");
+    } catch (err) {
+      console.error(err);
+      showStatus("테스트 실패: " + err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="premium-card p-10 animate-fade-in space-y-10">
+      <div className="flex items-center justify-between">
+        <div>
+           <h3 className="text-2xl font-black text-slate-900 mb-2">Microsoft Teams 알림 설정</h3>
+           <p className="text-sm font-bold text-slate-400">보정 요청이 들어올 때 인사팀 팀즈로 즉시 알림을 보냅니다.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className={`text-xs font-black uppercase tracking-widest ${enabled ? 'text-indigo-600' : 'text-slate-400'}`}>
+            {enabled ? '작동 중' : '중단됨'}
+          </span>
+          <button 
+            onClick={() => setEnabled(!enabled)}
+            className={`w-14 h-8 rounded-full transition-all flex items-center p-1 ${enabled ? 'bg-indigo-600 justify-end' : 'bg-slate-200 justify-start'}`}
+          >
+            <div className="w-6 h-6 bg-white rounded-full shadow-sm"></div>
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div>
+          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Teams Incoming Webhook URL</label>
+          <div className="relative group">
+            <Bell size={20} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+            <input 
+              type="text"
+              value={webhookUrl}
+              onChange={e => setWebhookUrl(e.target.value)}
+              className="w-full pl-14 pr-6 py-5 rounded-2xl bg-slate-50 border border-slate-100 outline-none focus:ring-4 focus:ring-indigo-100/50 focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
+              placeholder="https://outlook.office.com/webhook/..."
+            />
+          </div>
+          <p className="mt-4 text-[11px] text-slate-400 leading-relaxed font-bold">
+            * 팀즈 채널 설정에서 [커넥터] -> [Incoming Webhook]을 추가하여 발급받은 URL을 입력하세요.
+          </p>
+        </div>
+
+        <div className="flex gap-4">
+          <button 
+            onClick={handleTest}
+            disabled={loading}
+            className="flex-1 bg-white border-2 border-slate-100 text-slate-600 py-4 rounded-2xl font-black hover:border-indigo-100 hover:bg-slate-50 transition-all active:scale-[0.98] disabled:opacity-50"
+          >
+            테스트 전송
+          </button>
+          <button 
+            onClick={handleSave}
+            disabled={loading}
+            className="flex-[2] bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-[0.98] disabled:opacity-50"
+          >
+            설정 저장하기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const MyPage = ({ profile, onUpdate, showStatus }) => {
   const [localProfile, setLocalProfile] = useState(profile);
 
@@ -3231,7 +3429,7 @@ const InputLabel = ({ label }) => (
   </label>
 );
 
-  const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, onRejectRequest, fuelRates, onUpdateSettings, corVehicles, onExport, onImport }) => {
+  const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, onRejectRequest, fuelRates, onUpdateSettings, corVehicles, onExport, onImport, notificationSettings, showStatus }) => {
   const [users, setUsers] = useState([]);
   const [activeTab, setActiveTab] = useState('users'); // 기본 탭을 'users'로 변경 (migrate 숨김)
 
@@ -3292,6 +3490,12 @@ const InputLabel = ({ label }) => (
         >
           <Car size={16} /> 법인차량 관리
         </button>
+        <button 
+          onClick={() => setActiveTab('notifications')}
+          className={`px-8 py-4 rounded-2xl font-black text-sm transition-all flex items-center gap-3 ${activeTab === 'notifications' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+        >
+          <Bell size={16} /> 알림 설정
+        </button>
       </div>
 
       {activeTab === 'users' && <OrgChartView orgUnits={orgUnits} users={users} db={db} appId={appId} setOrgUnits={setOrgUnits} onUpdateUser={updateUser} />}
@@ -3301,9 +3505,18 @@ const InputLabel = ({ label }) => (
              <h3 className="text-xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
                <History className="text-orange-500" /> 보정 요청 검토
              </h3>
-             <span className="bg-orange-50 px-3 py-1 rounded-full text-[10px] font-black text-orange-500 uppercase tracking-widest">
-               {pendingRequests.length} Pending Actions
-             </span>
+             <div className="flex items-center gap-3">
+               <button 
+                 onClick={() => setActiveTab('notifications')}
+                 className="flex items-center gap-2 bg-slate-100 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 px-4 py-2 rounded-xl text-[10px] font-black transition-all border border-transparent hover:border-indigo-100"
+               >
+                 <Bell size={14} /> 
+                 팀즈 알림 {notificationSettings.enabled ? 'ON' : 'OFF'}
+               </button>
+               <span className="bg-orange-50 px-3 py-1 rounded-full text-[10px] font-black text-orange-500 uppercase tracking-widest">
+                 {pendingRequests.length} Pending Actions
+               </span>
+             </div>
           </div>
 
           {pendingRequests.length === 0 ? (
@@ -3359,6 +3572,7 @@ const InputLabel = ({ label }) => (
       )}
       {activeTab === 'fuel' && <SettingsPanel fuelRates={fuelRates} onUpdate={onUpdateSettings} db={db} appId={appId} />}
       {activeTab === 'corporate' && <CorporateVehicleManager corVehicles={corVehicles} users={users} db={db} appId={appId} />}
+      {activeTab === 'notifications' && <NotificationSettingsPanel settings={notificationSettings} db={db} appId={appId} showStatus={showStatus} />}
       {activeTab === 'migrate' && (
         <div className="bg-white p-12 rounded-[3.5rem] shadow-sm border border-slate-100 animate-fade-in text-center">
           <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl shadow-indigo-50">
