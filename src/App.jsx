@@ -186,6 +186,12 @@ const App = () => {
   });
   const [corVehicles, setCorVehicles] = useState([]);
   const [notificationSettings, setNotificationSettings] = useState({ teamsWebhookUrl: '', enabled: false });
+  const [historyFilters, setHistoryFilters] = useState({
+    selectedMonth: new Date().toLocaleDateString('sv-SE').slice(0, 7),
+    selectedDept: 'all',
+    selectedMember: 'all',
+    selectedDate: ''
+  });
 
   const pdfRef = useRef(null);
   
@@ -639,11 +645,19 @@ const App = () => {
       if (!isValidDistance(logData.distance)) throw new Error('Invalid distance: ' + logData.distance);
       
       const logId = logData.id || `log_${Date.now()}`;
+      
+      // [FIX] 전역 로그 데이터 참조를 위해 기존 데이터 먼저 가져오기
+      let existingLogData = null;
+      if (logData.id) {
+        const existingDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId));
+        if (existingDoc.exists()) {
+          existingLogData = existingDoc.data();
+        }
+      }
 
       // [SEC] 수정 시 소유자 검증 (관리자는 예외)
       if (logData.id && !isAdmin) {
-        const existingDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId));
-        if (existingDoc.exists() && existingDoc.data().userId !== user.uid) {
+        if (existingLogData && existingLogData.userId !== user.uid) {
           throw new Error('Forbidden: not the owner');
         }
       }
@@ -651,13 +665,14 @@ const App = () => {
       const payload = {
         ...logData,
         id: logId,
-        userId: user.uid,                               // [SEC] 서버에서 덮어쓰기 (클라이언트 조작 불가)
-        userName: sanitizeString(profile?.userName || user.email, 50),
-        department: sanitizeString(profile?.department || '미지정', 100),
+        // [FIX] 관리자가 수정 시 원래 소유자 정보 유지, 신규 작성 시에만 현재 세션 정보 적용
+        userId: logData.id ? (existingLogData?.userId || user.uid) : user.uid,
+        userName: logData.id ? (existingLogData?.userName || profile?.userName || user.email) : sanitizeString(profile?.userName || user.email, 50),
+        department: logData.id ? (existingLogData?.department || profile?.department || '미지정') : sanitizeString(profile?.department || '미지정', 100),
         purpose: sanitizeString(logData.purpose, 200),
         distance: Number(logData.distance),              // [SEC] 타입 강제 변환
         amount: Number(logData.amount),
-        createdAt: logData.createdAt || new Date().toISOString(),
+        createdAt: logData.createdAt || existingLogData?.createdAt || new Date().toISOString(),
         date: logData.date || new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0],
         requestStatus: 'none',
         requestType: null,
@@ -672,6 +687,15 @@ const App = () => {
       }
 
       showStatus(logData.id ? "기록이 수정되었습니다." : "기록이 저장되었습니다.");
+      
+      // [FIX] 수정된 내역을 바로 볼 수 있도록 해당 월로 필터 자동 전환
+      if (payload.date) {
+        setHistoryFilters(prev => ({
+          ...prev,
+          selectedMonth: payload.date.slice(0, 7)
+        }));
+      }
+      
       setView('history');
       setEditingLog(null);
     } catch (e) {
@@ -1052,7 +1076,19 @@ const App = () => {
               <main className="max-w-7xl">
                 {view === 'dashboard' && <Dashboard logs={logs} profile={profile} users={allUsers} orgUnits={orgUnits} />}
                 {view === 'log' && <LogEntryForm key={editingLog?.id || 'new'} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} corVehicles={corVehicles} />}
-                {view === 'history' && <HistoryTable logs={logs} onDelete={deleteLog} isAdmin={isAdmin} onRequestCorrection={requestCorrection} onUpdateLog={saveLog} profile={profile} onEdit={(log) => { setEditingLog(log); setView('log'); }} />}
+                {view === 'history' && (
+                  <HistoryTable 
+                    logs={logs} 
+                    onDelete={deleteLog} 
+                    isAdmin={isAdmin} 
+                    onRequestCorrection={requestCorrection} 
+                    onUpdateLog={saveLog} 
+                    profile={profile} 
+                    filters={historyFilters}
+                    onFilterChange={setHistoryFilters}
+                    onEdit={(log) => { setEditingLog(log); setView('log'); }} 
+                  />
+                )}
                 {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} corVehicles={corVehicles} profile={profile} />}
                 {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} onExport={handleNativeExport} onImport={handleNativeImport} notificationSettings={notificationSettings} showStatus={showStatus} />}
                 {view === 'orgchart' && <OrgChartView orgUnits={orgUnits} users={allUsers} db={db} appId={appId} setOrgUnits={setOrgUnits} />}
@@ -2019,13 +2055,16 @@ const InputGroup = ({ label, icon, children }) => (
   </div>
 );
 
-const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, profile }) => {
+const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, profile, filters, onFilterChange }) => {
   const [requestModal, setRequestModal] = useState({ show: false, logId: null, type: 'delete' });
   const [reason, setReason] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [selectedDept, setSelectedDept] = useState('all');
-  const [selectedMember, setSelectedMember] = useState('all');
-  const [selectedDateFilter, setSelectedDateFilter] = useState('');
+  
+  const { selectedMonth, selectedDept, selectedMember, selectedDate: selectedDateFilter } = filters;
+
+  const setSelectedMonth = (val) => onFilterChange({ ...filters, selectedMonth: val });
+  const setSelectedDept = (val) => onFilterChange({ ...filters, selectedDept: val, selectedMember: 'all' });
+  const setSelectedMember = (val) => onFilterChange({ ...filters, selectedMember: val });
+  const setSelectedDateFilter = (val) => onFilterChange({ ...filters, selectedDate: val });
 
   // 권한에 따른 필터 노출 여부
   const showFilters = isAdmin || profile?.role === 'manager';
