@@ -555,20 +555,7 @@ const App = () => {
     const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
       // [UI] 데이터를 성공적으로 가져오면 기존의 가져오기 실패 관련 에러 메시지는 제거
       setStatusMessage(prev => (prev?.msg?.includes("운행 내역") ? null : prev));
-
-      const logsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(log => {
-          // [SEC] 쿼리로 이미 상당 부분 필터링되었으나, 보안 강화를 위해 이중 체크 유지
-          if (log.userId === user.uid) return true;
-          
-          if (profile?.role === 'admin') return true;
-          if (profile?.role === 'manager') {
-            // 본인 부서 또는 하위 부서의 내역 모두 조회 가능 (뎁스 기반 처리)
-            return (log.department && log.department.startsWith(profile.department));
-          }
-          return false;
-        });
-      setLogs(logsData);
+      setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, err => {
       secureLog.error('logs snapshot error:', err);
       if (err.code === 'permission-denied') {
@@ -577,7 +564,27 @@ const App = () => {
     });
 
     return () => unsubscribeLogs();
-  }, [user, profile?.role, profile?.status, profile?.department]);
+  }, [user?.uid, profile?.role, profile?.status, profile?.department]);
+
+  // [UI/SEC] 보안을 위해 클라이언트 측에서도 권한에 따른 필터링을 이중으로 수행
+  const authorizedLogs = useMemo(() => {
+    if (!user || !profile) return [];
+    
+    return logs.filter(log => {
+      // 1. 본인 기록이면 무조건 허용
+      if (log.userId === user.uid) return true;
+      
+      // 2. 관리자는 모든 기록 허용
+      if (profile.role === 'admin') return true;
+      
+      // 3. 매니저는 본인 부서 및 하위 부서의 기록 허용
+      if (profile.role === 'manager' && profile.department) {
+        return (log.department && log.department.startsWith(profile.department));
+      }
+      
+      return false;
+    });
+  }, [logs, user, profile]);
 
   useEffect(() => {
     if (!profile) return;
@@ -1177,7 +1184,7 @@ const App = () => {
                 {view === 'log' && <LogEntryForm key={editingLog?.id || 'new'} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} corVehicles={corVehicles} />}
                 {view === 'history' && (
                   <HistoryTable 
-                    logs={logs} 
+                    logs={authorizedLogs} 
                     onDelete={deleteLog} 
                     isAdmin={isAdmin} 
                     onRequestCorrection={requestCorrection} 
@@ -1188,8 +1195,8 @@ const App = () => {
                     onEdit={(log) => { setEditingLog(log); setView('log'); }} 
                   />
                 )}
-                {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} corVehicles={corVehicles} profile={profile} />}
-                {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} onExport={handleNativeExport} onImport={handleNativeImport} notificationSettings={notificationSettings} showStatus={showStatus} />}
+                {view === 'reports' && <ManagementReport logs={authorizedLogs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} corVehicles={corVehicles} profile={profile} />}
+                {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={authorizedLogs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} onExport={handleNativeExport} onImport={handleNativeImport} notificationSettings={notificationSettings} showStatus={showStatus} />}
                 {view === 'orgchart' && <OrgChartView orgUnits={orgUnits} users={allUsers} db={db} appId={appId} setOrgUnits={setOrgUnits} />}
                 {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} showStatus={showStatus} onLogout={logout} />}
               </main>
@@ -2214,10 +2221,13 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, pr
 
   // 부서가 바뀌어 현재 선택된 사용자가 가용 목록에 없으면 초기화
   useEffect(() => {
-    if (selectedMember !== 'all' && !availableMembers.includes(selectedMember)) {
+    // 로그 데이터가 아직 로딩 중이거나 비어있을 때는 초기화하지 않음 (flicker 방지)
+    if (logs.length === 0) return;
+    
+    if (selectedMember !== 'all' && availableMembers.length > 0 && !availableMembers.includes(selectedMember)) {
       setSelectedMember('all');
     }
-  }, [availableMembers, selectedMember]);
+  }, [availableMembers, selectedMember, logs.length]);
 
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
