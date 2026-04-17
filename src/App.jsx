@@ -1190,7 +1190,7 @@ const App = () => {
                 {view === 'reports' && <ManagementReport logs={logs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} corVehicles={corVehicles} profile={profile} />}
                 {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={logs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} onExport={handleNativeExport} onImport={handleNativeImport} notificationSettings={notificationSettings} showStatus={showStatus} />}
                 {view === 'orgchart' && <OrgChartView orgUnits={orgUnits} users={allUsers} db={db} appId={appId} setOrgUnits={setOrgUnits} />}
-                {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} showStatus={showStatus} />}
+                {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} showStatus={showStatus} onLogout={logout} />}
               </main>
             </div>
           </div>
@@ -2874,7 +2874,7 @@ const NotificationSettingsPanel = ({ settings, db, appId, showStatus }) => {
   );
 };
 
-const MyPage = ({ profile, onUpdate, showStatus }) => {
+const MyPage = ({ profile, onUpdate, showStatus, onLogout }) => {
   const [localProfile, setLocalProfile] = useState(profile);
 
   useEffect(() => {
@@ -2927,6 +2927,15 @@ const MyPage = ({ profile, onUpdate, showStatus }) => {
             <span className="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md uppercase tracking-widest">{profile?.department || '부서 미지정'}</span>
             <span className="text-[12px] font-bold text-slate-400">{profile?.email}</span>
           </div>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+            <button 
+                onClick={onLogout}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 text-red-500 font-black text-xs hover:bg-red-500 hover:text-white transition-all active:scale-95 shadow-sm shadow-red-100/50"
+            >
+                <LogOut size={16} />
+                <span>로그아웃</span>
+            </button>
         </div>
       </div>
 
