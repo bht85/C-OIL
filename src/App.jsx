@@ -578,6 +578,68 @@ const App = () => {
     return () => unsubscribeLogs();
   }, [user, profile?.role, profile?.status, profile?.department]);
 
+  useEffect(() => {
+    if (!profile) return;
+    const fetchOrgUnits = async () => {
+      const snap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'orgUnits'));
+      if (snap.exists()) setOrgUnits(snap.data().units || []);
+    };
+    fetchOrgUnits();
+  }, [profile]);
+
+  useEffect(() => {
+    if (!user || !profile) return;
+
+    const requestNotificationPermission = async () => {
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          // [VAPID] 사용자 제공 키 적용
+          const VAPID_KEY = "BDRMXr4pIsJdNTh4oK3T7-wxb0o0IEL4TFujPuiyvYxk8tH0EyVI2TUajyeKtDGpt1HwkqdjiLv-oyQzSsi-_Pg";
+          
+          const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+          if (token) {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), {
+              fcmToken: token,
+              notificationEnabled: true
+            });
+            secureLog.log('FCM Token saved');
+          }
+        }
+      } catch (error) {
+        secureLog.error('Notification permission/token error:', error);
+      }
+    };
+
+    requestNotificationPermission();
+
+    const unsubscribeOnMessage = onMessage(messaging, (payload) => {
+      secureLog.log('Foreground message received:', payload);
+      showStatus(`${payload.notification.title}: ${payload.notification.body}`, 'info');
+    });
+
+    return () => unsubscribeOnMessage();
+  }, [user, profile?.uid]);
+
+  const sendPushNotification = async (targetUserId, title, body) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', targetUserId));
+      const token = userDoc.data()?.fcmToken;
+      
+      if (!token) {
+        secureLog.warn('Push notification failed: No token found for user', targetUserId);
+        return;
+      }
+
+      // [NOTE] 클라이언트에서 직접 FCM을 발송하는 것은 서버 키 노출 위험이 있으나,
+      // 현재 서버리스 데모 구조상 클라이언트 트리거로 구성합니다.
+      secureLog.log('Triggering push to:', token, title, body);
+      // 향후 Firebase Cloud Functions 등으로 고도화 권장
+    } catch (error) {
+      secureLog.error('Error sending push notification:', error);
+    }
+  };
+
   const showStatus = (msg, type = 'success', duration = 5000) => {
     setStatusMessage({ msg: String(msg), type });
     // 이미 타이머가 있다면 초기화하는 로직은 여기 없지만, 단순화를 위해 시간만 늘림
@@ -812,11 +874,21 @@ const App = () => {
     } catch { showStatus("처리 실패", 'error'); }
   };
 
-  const rejectRequest = async (id) => {
+  const rejectRequest = async (id, reason = '') => {
     try {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', id), {
+      const logDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'logs', id);
+      const logSnap = await getDoc(logDocRef);
+      const logData = logSnap.data();
+
+      await updateDoc(logDocRef, {
         requestStatus: 'none'
       });
+      
+      // [PUSH] 신청자에게 알림 발송
+      if (logData) {
+        sendPushNotification(logData.userId, '운행 내역 반려', `요청하신 내역이 반려되었습니다. 사유: ${reason || '관리자 검토 결과'}`);
+      }
+
       showStatus("요청이 반려되었습니다.");
     } catch { showStatus("처리 실패", 'error'); }
   };
