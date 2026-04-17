@@ -194,6 +194,7 @@ const App = () => {
     selectedMember: 'all',
     selectedDate: ''
   });
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const pdfRef = useRef(null);
   
@@ -1194,6 +1195,25 @@ const App = () => {
               </main>
             </div>
           </div>
+          
+          <MobileBottomNav 
+            currentView={view} 
+            onNavigate={(v) => { setView(v); setEditingLog(null); }} 
+            onMenuToggle={() => setIsMobileMenuOpen(true)} 
+            pendingCount={logs.filter(log => log.requestStatus === 'pending').length}
+            disabled={!profile?.vehicleName || !profile?.fuelType}
+          />
+
+          <MobileMenuSheet 
+            isOpen={isMobileMenuOpen}
+            onClose={() => setIsMobileMenuOpen(false)}
+            currentView={view}
+            onNavigate={(v) => { setView(v); setEditingLog(null); }}
+            onLogout={logout}
+            isAdmin={isAdmin}
+            userProfile={profile}
+            pendingCount={logs.filter(log => log.requestStatus === 'pending').length}
+          />
         </div>
       )}
       {/* Hidden PDF Template for generation */}
@@ -3126,6 +3146,110 @@ const MyPage = ({ profile, onUpdate, showStatus, onLogout }) => {
         </div>
       </div>
     );
+};
+
+// --- Enhanched Mobile Nav Components ---
+
+const MobileBottomNav = ({ currentView, onNavigate, onMenuToggle, pendingCount, disabled }) => {
+  const tabs = [
+    { id: 'dashboard', icon: <LayoutDashboard size={20} />, label: '대시보드' },
+    { id: 'log', icon: <PlusCircle size={24} className="text-white" />, label: '신규등록', isAction: true },
+    { id: 'history', icon: <History size={20} />, label: '정산내역' },
+    { id: 'menu', icon: <Menu size={20} />, label: '전체메뉴', isMenu: true }
+  ];
+
+  return (
+    <div className="lg:hidden fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-md border-t border-slate-100 pb-2 z-50 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+      <div className="flex justify-around items-center h-16 px-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={disabled ? undefined : () => {
+              if (tab.isMenu) onMenuToggle();
+              else onNavigate(tab.id);
+            }}
+            className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-all ${
+              disabled ? 'opacity-30 cursor-not-allowed' : 'active:scale-95'
+            }`}
+          >
+            {tab.isAction ? (
+              <div className="bg-indigo-600 w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-indigo-200 -mt-5 border-4 border-white">
+                {tab.icon}
+              </div>
+            ) : (
+              <>
+                <div className={`relative ${currentView === tab.id ? 'text-indigo-600' : 'text-slate-400'}`}>
+                  {tab.icon}
+                  {tab.id === 'menu' && pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                  )}
+                </div>
+                <span className={`text-[9.5px] font-black tracking-tight ${currentView === tab.id && !tab.isMenu ? 'text-indigo-600' : 'text-slate-400'}`}>
+                  {tab.label}
+                </span>
+              </>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const MobileMenuSheet = ({ isOpen, onClose, currentView, onNavigate, onLogout, isAdmin, userProfile, pendingCount }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="lg:hidden fixed inset-0 z-[100] flex flex-col justify-end">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+      <div className="relative bg-white rounded-t-3xl shadow-2xl p-6 pb-10 animate-slide-up max-h-[85vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-black text-slate-800 tracking-tight">전체 메뉴</h2>
+          <button onClick={onClose} className="p-2 bg-slate-50 text-slate-500 hover:text-slate-900 rounded-full transition-all">
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="mb-6 flex items-center gap-4 bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50">
+          <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-md">
+            {userProfile?.userName?.[0] || 'U'}
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-indigo-500 tracking-widest uppercase mb-0.5">{userProfile?.department}</p>
+            <h3 className="text-base font-black text-slate-900 tracking-tight leading-none">{userProfile?.userName}</h3>
+          </div>
+        </div>
+
+        <div className="space-y-2 mb-8">
+          <button onClick={() => { onNavigate('profile'); onClose(); }} className={`w-full flex items-center gap-3 p-4 rounded-2xl ${currentView === 'profile' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-700'}`}>
+             <UserCircle size={20} /> <span className="font-bold text-sm">내 프로필</span>
+          </button>
+          
+          {(isAdmin || userProfile?.role === 'manager') && (
+            <button onClick={() => { onNavigate('reports'); onClose(); }} className={`w-full flex items-center gap-3 p-4 rounded-2xl ${currentView === 'reports' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-700'}`}>
+              <FileText size={20} /> <span className="font-bold text-sm">통계 리포트</span>
+            </button>
+          )}
+          
+          {isAdmin && (
+            <button onClick={() => { onNavigate('admin'); onClose(); }} className={`w-full flex items-center justify-between p-4 rounded-2xl ${currentView === 'admin' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-700'}`}>
+              <div className="flex items-center gap-3">
+                 <Settings size={20} /> <span className="font-bold text-sm">인사 관리</span>
+              </div>
+              {pendingCount > 0 && <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{pendingCount}</span>}
+            </button>
+          )}
+
+          <button onClick={() => { onNavigate('orgchart'); onClose(); }} className={`w-full flex items-center gap-3 p-4 rounded-2xl ${currentView === 'orgchart' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-700'}`}>
+             <Network size={20} /> <span className="font-bold text-sm">조직도</span>
+          </button>
+        </div>
+
+        <button onClick={() => { onClose(); onLogout(); }} className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-red-50 text-red-500 font-bold active:scale-95 transition-all">
+          <LogOut size={18} /> 로그아웃
+        </button>
+      </div>
+    </div>
+  );
 };
 
 // --- Enhanced Components ---
