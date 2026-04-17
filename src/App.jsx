@@ -13,6 +13,7 @@ import {
   verifyPasswordResetCode
 } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, query, getDoc, updateDoc, orderBy, getDocs, writeBatch, where, or } from 'firebase/firestore';
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { 
@@ -120,6 +121,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 auth.languageCode = 'ko';
 const db = getFirestore(app);
+const messaging = getMessaging(app);
 const appId = getSafeGlobal('__app_id', 'vehicle-fuel-tracker');
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -802,6 +804,11 @@ const App = () => {
         });
         showStatus("요청 승인: 이제 해당 내역을 수정할 수 있습니다.");
       }
+      
+      // [PUSH] 신청자에게 알림 발송
+      sendPushNotification(log.userId, '운행 내역 승인', '요청하신 운행 내역 수정이 승인되었습니다.');
+      
+      showStatus(`${log.userName}님의 요청이 승인되었습니다.`);
     } catch { showStatus("처리 실패", 'error'); }
   };
 
