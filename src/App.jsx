@@ -12,7 +12,7 @@ import {
   confirmPasswordReset,
   verifyPasswordResetCode
 } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, query, getDoc, updateDoc, orderBy, getDocs, writeBatch, where } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, query, getDoc, updateDoc, orderBy, getDocs, writeBatch, where, or } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { 
@@ -529,14 +529,33 @@ const App = () => {
     };
     fetchRates();
 
-    const logsQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), orderBy('date', 'desc'));
+    const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
+    let logsQuery;
+    
+    if (profile?.role === 'admin') {
+      // 관리자는 전체 컬렉션 조회 가능 (보안 규칙에 어드민 예외가 있다는 가정 하에)
+      logsQuery = query(logsRef, orderBy('date', 'desc'));
+    } else if (profile?.role === 'manager' && profile?.department) {
+      // 매니저는 본인 작성 기록과 본인 부서의 기록을 볼 수 있도록 필터링
+      logsQuery = query(logsRef, 
+        or(
+          where('userId', '==', user.uid),
+          where('department', '==', profile.department)
+        ), 
+        orderBy('date', 'desc')
+      );
+    } else {
+      // 일반 사용자는 오직 본인이 작성한 기록만 가져오도록 쿼리하여 권한 에러 방지
+      logsQuery = query(logsRef, where('userId', '==', user.uid), orderBy('date', 'desc'));
+    }
+
     const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
       // [UI] 데이터를 성공적으로 가져오면 기존의 가져오기 실패 관련 에러 메시지는 제거
       setStatusMessage(prev => (prev?.msg?.includes("운행 내역") ? null : prev));
 
       const logsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
         .filter(log => {
-          // [SEC] 본인 기록은 권한과 관계없이 항상 조회 가능
+          // [SEC] 쿼리로 이미 상당 부분 필터링되었으나, 보안 강화를 위해 이중 체크 유지
           if (log.userId === user.uid) return true;
           
           if (profile?.role === 'admin') return true;
