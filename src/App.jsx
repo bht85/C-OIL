@@ -148,7 +148,7 @@ const sanitizeString = (str, maxLength = 200) => {
 // [UI] Multiavatar 기반의 사용자별 고유 캐릭터 아바타 URL 생성
 const getAvatarUrl = (email) => {
   const seed = encodeURIComponent(email || 'default');
-  return `https://api.multiavatar.com/${seed}.svg`;
+  return `https://api.dicebear.com/7.x/multiavatar/svg?seed=${seed}`;
 };
 
 const isValidDate = (dateStr) => {
