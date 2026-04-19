@@ -148,7 +148,7 @@ const sanitizeString = (str, maxLength = 200) => {
 // [UI] DiceBear 기반의 사용자별 고유 캐릭터 아바타 URL 생성
 const getAvatarUrl = (email) => {
   const seed = encodeURIComponent(email || 'default');
-  return `https://api.dicebear.com/7.x/thumbs/svg?seed=${seed}`;
+  return `https://api.dicebear.com/7.x/open-peeps/svg?seed=${seed}&scale=90`;
 };
 
 const isValidDate = (dateStr) => {
