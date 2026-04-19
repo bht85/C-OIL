@@ -3135,15 +3135,7 @@ const MyPage = ({ profile, onUpdate, showStatus, onLogout }) => {
             <span className="text-[12px] font-bold text-slate-400">{profile?.email}</span>
           </div>
         </div>
-        <div className="hidden lg:flex ml-auto items-center gap-2">
-            <button 
-                onClick={onLogout}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 text-red-500 font-black text-xs hover:bg-red-500 hover:text-white transition-all active:scale-95 shadow-sm shadow-red-100/50"
-            >
-                <LogOut size={16} />
-                <span>로그아웃</span>
-            </button>
-        </div>
+        {/* 로그아웃 버튼 제거 (사이드바 메뉴와 중복) */}
       </div>
 
       <div className="space-y-5">
