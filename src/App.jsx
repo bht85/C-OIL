@@ -4639,12 +4639,29 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, cor
       </div>
 
       <div className="premium-card p-8 rounded-[2.5rem]">
-        <div className="flex justify-between items-center mb-10">
-          <div className="flex items-center gap-3">
-             <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><FileText size={18} /></div>
-             <h4 className="text-lg font-black text-slate-800 tracking-tight">정산 데이터 실시간 필터</h4>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 bg-indigo-50/30 p-6 rounded-[2rem] border border-indigo-100/50">
+          <div className="flex flex-col">
+            <span className="text-xs font-black text-indigo-600 mb-1">데이터 조회 섹션</span>
+            <p className="text-[10px] font-bold text-slate-400">필터를 조절한 뒤 조회 버튼을 눌러주세요.</p>
           </div>
+          <button
+            onClick={() => onSearch({
+              selectedMonth: filters.selectedMonth,
+              selectedDept: filters.department,
+              selectedMember: filters.userId === 'all' ? 'all' : (users.find(u => u.uid === filters.userId)?.userName || 'all')
+            })}
+            disabled={isSearching}
+            className={`flex items-center justify-center gap-3 px-10 py-4 rounded-2xl font-black text-sm transition-all shadow-lg active:scale-95 ${
+              isSearching 
+              ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
+              : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200/50'
+            }`}
+          >
+            {isSearching ? <RefreshCw size={18} className="animate-spin" /> : <Search size={18} />}
+            <span>{isSearching ? '데이터 수집 중...' : '조건으로 필터 조회하기'}</span>
+          </button>
         </div>
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 items-end">
           <div className="space-y-3">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">부서별 필터</label>
@@ -4702,24 +4719,6 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, cor
                   onChange={e => onFilterChange({...filters, endDate: e.target.value})}
                 />
               </div>
-
-              {/* 조회 버튼 추가 */}
-              <button
-                onClick={() => onSearch({
-                  selectedMonth: filters.selectedMonth,
-                  selectedDept: filters.department,
-                  selectedMember: filters.userId === 'all' ? 'all' : (users.find(u => u.uid === filters.userId)?.userName || 'all')
-                })}
-                disabled={isSearching}
-                className={`flex items-center gap-2 px-8 py-4.5 rounded-2xl font-black text-sm transition-all shadow-sm active:scale-95 ${
-                  isSearching 
-                  ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
-                  : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100'
-                }`}
-              >
-                {isSearching ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />}
-                {isSearching ? '조회 중...' : '조회'}
-              </button>
             </div>
           </div>
         </div>
