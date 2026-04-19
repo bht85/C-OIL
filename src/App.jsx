@@ -136,6 +136,8 @@ const isDev = import.meta.env.DEV;
 const secureLog = {
   error: (...args) => { if (isDev) console.error(...args); },
   warn: (...args) => { if (isDev) console.warn(...args); },
+  info: (...args) => { if (isDev) console.info(...args); },
+  log: (...args) => { if (isDev) console.log(...args); },
 };
 
 // [SEC] 입력값 Sanitize 유틸리티
@@ -369,7 +371,18 @@ const App = () => {
   useEffect(() => {
     if (!user || (profile?.role !== 'admin' && profile?.role !== 'manager')) return;
     
-    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
+    let q;
+    if (profile?.role === 'manager' && profile?.department) {
+      // 매니저는 본인 부서 인원만 조회 (보안 규칙 준수)
+      q = query(
+        collection(db, 'artifacts', appId, 'public', 'data', 'profiles'),
+        where('department', '>=', profile.department),
+        where('department', '<=', profile.department + '\uf8ff')
+      );
+    } else {
+      q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
+    }
+
     const unsubscribe = onSnapshot(q, (snap) => {
       setAllUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, err => {
@@ -536,19 +549,15 @@ const App = () => {
     let logsQuery;
     
     if (profile?.role === 'admin') {
-      // 관리자는 전체 컬렉션 조회 가능 (보안 규칙에 어드민 예외가 있다는 가정 하에)
       logsQuery = query(logsRef, orderBy('date', 'desc'));
     } else if (profile?.role === 'manager' && profile?.department) {
-      // 매니저는 본인 작성 기록과 본인 부서의 기록을 볼 수 있도록 필터링
+      // 매니저는 본인 부서 및 하위 부서를 포함하여 조회 (범위 쿼리 사용)
       logsQuery = query(logsRef, 
-        or(
-          where('userId', '==', user.uid),
-          where('department', '==', profile.department)
-        ), 
+        where('department', '>=', profile.department),
+        where('department', '<=', profile.department + '\uf8ff'),
         orderBy('date', 'desc')
       );
     } else {
-      // 일반 사용자는 오직 본인이 작성한 기록만 가져오도록 쿼리하여 권한 에러 방지
       logsQuery = query(logsRef, where('userId', '==', user.uid), orderBy('date', 'desc'));
     }
 
@@ -1193,6 +1202,7 @@ const App = () => {
                     filters={historyFilters}
                     onFilterChange={setHistoryFilters}
                     onEdit={(log) => { setEditingLog(log); setView('log'); }} 
+                    allUsers={allUsers}
                   />
                 )}
                 {view === 'reports' && <ManagementReport logs={authorizedLogs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} corVehicles={corVehicles} profile={profile} />}
@@ -1272,6 +1282,9 @@ const Dashboard = ({ logs, profile, users, orgUnits }) => {
 
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
+      // [FIX] 위치 기록 데이터는 통계에서 제외
+      if (log.isCommute) return false;
+
       const matchMonth = log.date.startsWith(selectedMonth);
       const matchUser = selectedUserId === 'all' || log.userId === selectedUserId;
       const matchDept = selectedDept === 'all' || (log.department && log.department.startsWith(selectedDept));
@@ -2180,7 +2193,7 @@ const InputGroup = ({ label, icon, children }) => (
   </div>
 );
 
-const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, profile, filters, onFilterChange }) => {
+const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, profile, filters, onFilterChange, allUsers }) => {
   const [requestModal, setRequestModal] = useState({ show: false, logId: null, type: 'delete' });
   const [reason, setReason] = useState('');
   
@@ -2212,8 +2225,10 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, pr
   const availableMembers = useMemo(() => {
     const mems = new Set();
     filteredByMonth.forEach(log => {
-      if (selectedDept === 'all' || log.department === selectedDept) {
-        if (log.userName) mems.add(log.userName);
+      // [FIX] 부서 매칭 시 하위 부서까지 포함될 수 있도록 startsWith 사용
+      const isMatch = selectedDept === 'all' || (log.department && log.department.startsWith(selectedDept));
+      if (isMatch && log.userName) {
+        mems.add(log.userName);
       }
     });
     return Array.from(mems).sort();
@@ -2231,13 +2246,24 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, pr
 
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
+      // [FIX] 위치 기록(출퇴근 등) 데이터는 정산 내역 목록에서 제외
+      if (log.isCommute) return false;
+
       const matchMonth = log.date.startsWith(selectedMonth);
       const matchDate = !selectedDateFilter || log.date === selectedDateFilter;
-      const matchDept = !showFilters || selectedDept === 'all' || log.department === selectedDept;
+      
+      // [FIX] 로그 자체에 부서 정보가 없는 경우, 사용자 정보를 참조하여 필터링 보완
+      const logUser = allUsers?.find(u => u.uid === log.userId);
+      const logDept = (log.department || logUser?.department || "").trim();
+      const targetDept = (selectedDept || "").trim();
+
+      // [FIX] 부서 필터링을 계층형(startsWith)으로 변경하여 하위 부서 포함 가능하게 함
+      const matchDept = !showFilters || selectedDept === 'all' || (logDept && logDept.startsWith(targetDept));
       const matchMember = !showFilters || selectedMember === 'all' || log.userName === selectedMember;
+      
       return matchMonth && matchDate && matchDept && matchMember;
     });
-  }, [logs, selectedMonth, selectedDateFilter, selectedDept, selectedMember, showFilters]);
+  }, [logs, selectedMonth, selectedDateFilter, selectedDept, selectedMember, showFilters, allUsers]);
 
   const stats = useMemo(() => {
     const totalDist = filteredLogs.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
@@ -2289,7 +2315,6 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, pr
               value={selectedMonth}
               onChange={(e) => {
                 setSelectedMonth(e.target.value);
-                setSelectedDateFilter('');
               }}
             />
           </div>
@@ -2302,10 +2327,7 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, pr
                 <select 
                   className="bg-transparent font-black text-slate-700 outline-none cursor-pointer text-sm w-full appearance-none pr-6"
                   value={selectedDept}
-                  onChange={(e) => {
-                    setSelectedDept(e.target.value);
-                    setSelectedMember('all');
-                  }}
+                  onChange={(e) => setSelectedDept(e.target.value)}
                 >
                   <option value="all">부서 전체</option>
                   {availableDepts.map(dept => (
@@ -2469,9 +2491,14 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, pr
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] font-bold text-slate-400 flex items-center gap-2 mt-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
-                          {log.userName}
+                        <div className="flex flex-col gap-1 mt-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
+                            <span className="font-black text-slate-800 text-[13px]">{log.userName}</span>
+                          </div>
+                          <div className="pl-3.5 text-[10px] font-bold text-slate-400">
+                            {(log.department || allUsers?.find(u => u.uid === log.userId)?.department || '부서 미지정')}
+                          </div>
                         </div>
                       </td>
                       <td className="px-8 py-7">
@@ -3711,7 +3738,73 @@ const InputLabel = ({ label }) => (
 
   const AdminPanel = ({ db, appId, orgUnits, setOrgUnits, logs, onApproveRequest, onRejectRequest, fuelRates, onUpdateSettings, corVehicles, onExport, onImport, notificationSettings, showStatus }) => {
   const [users, setUsers] = useState([]);
-  const [activeTab, setActiveTab] = useState('users'); // 기본 탭을 'users'로 변경 (migrate 숨김)
+  const [activeTab, setActiveTab] = useState('users');
+  const [isMigrating, setIsMigrating] = useState(false);
+
+  const handleMigrateDept = async () => {
+    const targetPath = "경영지원본부 > 인사총무팀";
+    if (!window.confirm("부서 데이터 구조를 재정비하시겠습니까?\n1. '(주)컴포즈커피 > ' 접두어 제거\n2. '인사팀' -> '경영지원본부 > 인사총무팀' 변경")) return;
+    setIsMigrating(true);
+    try {
+      let logUpdated = 0;
+      let profileUpdated = 0;
+
+      // 1. Logs 수정
+      const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
+      const logSnap = await getDocs(logsRef);
+      const logBatch = writeBatch(db);
+      
+      logSnap.docs.forEach(d => {
+        let dept = d.data().department || "";
+        let original = dept;
+        
+        // 접두어 제거
+        if (dept.startsWith("(주)컴포즈커피 > ")) {
+          dept = dept.replace("(주)컴포즈커피 > ", "");
+        }
+        // 인사팀 매칭
+        if (dept.includes("인사")) {
+          dept = targetPath;
+        }
+
+        if (dept !== original) {
+          logBatch.update(d.ref, { department: dept });
+          logUpdated++;
+        }
+      });
+      if (logUpdated > 0) await logBatch.commit();
+
+      // 2. Profiles 수정
+      const profilesRef = collection(db, 'artifacts', appId, 'public', 'data', 'profiles');
+      const profileSnap = await getDocs(profilesRef);
+      const profileBatch = writeBatch(db);
+
+      profileSnap.docs.forEach(d => {
+        let dept = d.data().department || "";
+        let original = dept;
+
+        if (dept.startsWith("(주)컴포즈커피 > ")) {
+          dept = dept.replace("(주)컴포즈커피 > ", "");
+        }
+        if (dept.includes("인사")) {
+          dept = targetPath;
+        }
+
+        if (dept !== original) {
+          profileBatch.update(d.ref, { department: dept });
+          profileUpdated++;
+        }
+      });
+      if (profileUpdated > 0) await profileBatch.commit();
+
+      alert(`구조 재정비 완료!\n- 로그 수정: ${logUpdated}건\n- 프로필 수정: ${profileUpdated}건`);
+    } catch (e) {
+      console.error(e);
+      alert("변경 중 오류가 발생했습니다.");
+    } finally {
+      setIsMigrating(false);
+    }
+  };
 
   useEffect(() => {
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
@@ -3733,12 +3826,12 @@ const InputLabel = ({ label }) => (
   return (
     <div className="space-y-10">
       <div className="flex flex-wrap gap-4 p-2 bg-white rounded-[2rem] w-fit border border-slate-100 shadow-sm">
-        {/* [HIDDEN] 데이터 이전 탭 숨김 처리
+        {/* [HIDDEN] 데이터 관리 탭 주석 처리 (필요시 활성화)
         <button 
           onClick={() => setActiveTab('migrate')}
           className={`px-8 py-4 rounded-2xl font-black text-sm transition-all flex items-center gap-3 ${activeTab === 'migrate' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
         >
-          <RefreshCw size={16} /> 데이터 이전
+          <RefreshCw size={16} /> 데이터 관리
         </button>
         */}
         <button 
@@ -3777,6 +3870,31 @@ const InputLabel = ({ label }) => (
           <Bell size={16} /> 알림 설정
         </button>
       </div>
+
+
+      {/* [HIDDEN] 마이그레이션 UI 주석 처리
+      {activeTab === 'migrate' && (
+        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8 animate-slide-up">
+          <div>
+            <h3 className="text-xl font-black text-slate-800 tracking-tight">부서 데이터 일괄 정리</h3>
+            <p className="text-sm font-bold text-slate-400 mt-2">과거 기록 중 특정 부서명을 일괄적으로 수정합니다.</p>
+          </div>
+          
+          <div className="p-8 bg-amber-50 rounded-3xl border border-amber-100">
+            <h4 className="font-black text-amber-800 mb-2">인사팀 → 인사총무팀 (강력한 정리)</h4>
+            <p className="text-sm text-amber-700 font-medium mb-6">'인사팀'이라는 단어가 포함된 모든 부서명(경로 포함)을 찾아 '인사총무팀'으로 변경합니다. 로그 기록뿐만 아니라 사용자 프로필의 부서 정보도 함께 수정됩니다.</p>
+            <button
+              onClick={handleMigrateDept}
+              disabled={isMigrating}
+              className={`px-8 py-4 rounded-2xl font-black text-sm shadow-lg transition-all flex items-center gap-3 ${isMigrating ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-amber-500 text-white hover:bg-amber-600 active:scale-95 shadow-amber-100'}`}
+            >
+              <RefreshCw size={18} className={isMigrating ? 'animate-spin' : ''} />
+              {isMigrating ? '처리 중...' : '부서명 정리 실행 (강력)'}
+            </button>
+          </div>
+        </div>
+      )}
+      */}
 
       {activeTab === 'users' && <OrgChartView orgUnits={orgUnits} users={users} db={db} appId={appId} setOrgUnits={setOrgUnits} onUpdateUser={updateUser} />}
       {activeTab === 'requests' && (
@@ -4312,10 +4430,15 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, cor
 
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
+      // [FIX] 위치 기록 데이터는 통계 리포트에서 제외
+      if (log.isCommute) return false;
+
       const user = users.find(u => u.uid === log.userId);
-      const logDept = user?.department || '미지정';
+      // [FIX] 로그 기록 당시의 부서를 우선하고, 없으면 현재 유저 부서 참조 (정산 내역과 로직 통일)
+      const logDept = (log.department || user?.department || '미지정').trim();
+      const targetDept = (filters.department || filters.dept || "").trim();
       
-      const matchDept = filters.department === 'all' || (logDept && logDept.startsWith(filters.department));
+      const matchDept = targetDept === 'all' || (logDept && logDept.startsWith(targetDept));
       const matchUser = filters.userId === 'all' || log.userId === filters.userId;
       const matchStart = !filters.startDate || log.date >= filters.startDate;
       const matchEnd = !filters.endDate || log.date <= filters.endDate;
