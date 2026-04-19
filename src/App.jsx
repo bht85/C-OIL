@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
@@ -182,8 +181,8 @@ const App = () => {
   const [isNewUser, setIsNewUser] = useState(false);
   const [orgUnits, setOrgUnits] = useState(['(주)컴포즈커피', '(주)컴포즈커피 > 경영지원본부', '(주)컴포즈커피 > 경영지원본부 > IT지원팀', '(주)컴포즈커피 > 경영지원본부 > 법무팀', '(주)컴포즈커피 > 경영지원본부 > 인사총무팀']);
   const [reportFilters, setReportFilters] = useState({
-    department: 'all',
-    userId: 'all',
+    department: profile?.department || 'all',
+    userId: profile?.uid || 'all',
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('sv-SE'),
     endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toLocaleDateString('sv-SE'),
     selectedMonth: new Date().toLocaleDateString('sv-SE').slice(0, 7)
@@ -192,11 +191,32 @@ const App = () => {
   const [notificationSettings, setNotificationSettings] = useState({ teamsWebhookUrl: '', enabled: false });
   const [historyFilters, setHistoryFilters] = useState({
     selectedMonth: new Date().toLocaleDateString('sv-SE').slice(0, 7),
-    selectedDept: 'all',
-    selectedMember: 'all',
+    selectedDept: profile?.department || 'all',
+    selectedMember: profile?.userName || 'all',
     selectedDate: ''
   });
+  const [isSearching, setIsSearching] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // 프로필 로딩 시 필터 초기값 동기화 (기존 'all'에서 본인 데이터로)
+  useEffect(() => {
+    if (profile) {
+      if (historyFilters.selectedDept === 'all' && historyFilters.selectedMember === 'all') {
+        setHistoryFilters(prev => ({
+          ...prev,
+          selectedDept: profile.department || 'all',
+          selectedMember: profile.userName || 'all'
+        }));
+      }
+      if (reportFilters.department === 'all' && reportFilters.userId === 'all') {
+        setReportFilters(prev => ({
+          ...prev,
+          department: profile.department || 'all',
+          userId: profile.uid || 'all'
+        }));
+      }
+    }
+  }, [profile]);
 
   const pdfRef = useRef(null);
   
@@ -534,8 +554,72 @@ const App = () => {
     }
   }, [isNewUser, user, profile]);
 
+  // [OPT] 서버 부하를 줄이기 위한 수동 조회(Search) 로직
+  const handleSearchLogs = useCallback(async (customFilters = null) => {
+    if (!user || !profile) return;
+    
+    setIsSearching(true);
+    const activeFilters = customFilters || historyFilters;
+    const { selectedMonth, selectedDept, selectedMember } = activeFilters;
+    
+    try {
+      const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
+      let q = logsRef;
+      
+      // 1. 기본 권한 및 필터링 적용
+      const constraints = [];
+
+      // 날짜 필터 (당월 조회)
+      if (selectedMonth) {
+        constraints.push(where('date', '>=', `${selectedMonth}-01`));
+        constraints.push(where('date', '<=', `${selectedMonth}-31`));
+      }
+
+      // 2. 권한별 데이터 범위 설정
+      if (profile.role === 'admin') {
+        // 어드민: 부서/사용자 선택 가능
+        if (selectedDept !== 'all') {
+          constraints.push(where('department', '>=', selectedDept));
+          constraints.push(where('department', '<=', selectedDept + '\uf8ff'));
+        }
+        if (selectedMember !== 'all') {
+          constraints.push(where('userName', '==', selectedMember));
+        }
+      } else if (profile.role === 'manager' && profile.department) {
+        // 매니저: 본인 부서 내에서만 필터링
+        constraints.push(where('department', '>=', profile.department));
+        constraints.push(where('department', '<=', profile.department + '\uf8ff'));
+        
+        if (selectedMember !== 'all') {
+          constraints.push(where('userName', '==', selectedMember));
+        }
+      } else {
+        // 일반 사용자: 본인 데이터만
+        constraints.push(where('userId', '==', user.uid));
+      }
+
+      constraints.push(orderBy('date', 'desc'));
+      
+      const logsQuery = query(q, ...constraints);
+      const snapshot = await getDocs(logsQuery);
+      
+      setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      showStatus(`${snapshot.size}건의 내역을 불러왔습니다.`, 'info');
+    } catch (err) {
+      secureLog.error('logs search error:', err);
+      if (err.code === 'failed-precondition') {
+        showStatus("색인이 필요합니다. 콘솔의 링크를 클릭해 주세요.", "error");
+      } else {
+        showStatus("조회 중 오류가 발생했습니다.", "error");
+      }
+    } finally {
+      setIsSearching(false);
+    }
+  }, [user?.uid, profile, appId, historyFilters]);
+
+  // 초기 로드: 일반 사용자/매니저/어드민 모두 본인의 당월 데이터 우선 로드
   useEffect(() => {
-    if (!user || (profile?.status !== 'approved' && profile?.role !== 'admin')) return;
+    if (!user || !profile || (profile?.status !== 'approved' && profile?.role !== 'admin')) return;
     
     const tripMonth = new Date().toISOString().slice(0, 7);
     const fetchRates = async () => {
@@ -545,35 +629,18 @@ const App = () => {
     };
     fetchRates();
 
-    const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
-    let logsQuery;
+    // 초기 1회 로드 (본인 기록 중심 - 어드민이라도 본인 데이터 우선 노출로 변경)
+    const initialFilters = {
+      selectedMonth: tripMonth,
+      selectedDept: profile.department || 'all',
+      selectedMember: profile.userName || 'all',
+      selectedDate: ''
+    };
     
-    if (profile?.role === 'admin') {
-      logsQuery = query(logsRef, orderBy('date', 'desc'));
-    } else if (profile?.role === 'manager' && profile?.department) {
-      // 매니저는 본인 부서 및 하위 부서를 포함하여 조회 (범위 쿼리 사용)
-      logsQuery = query(logsRef, 
-        where('department', '>=', profile.department),
-        where('department', '<=', profile.department + '\uf8ff'),
-        orderBy('date', 'desc')
-      );
-    } else {
-      logsQuery = query(logsRef, where('userId', '==', user.uid), orderBy('date', 'desc'));
-    }
+    setHistoryFilters(initialFilters);
+    handleSearchLogs(initialFilters);
 
-    const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
-      // [UI] 데이터를 성공적으로 가져오면 기존의 가져오기 실패 관련 에러 메시지는 제거
-      setStatusMessage(prev => (prev?.msg?.includes("운행 내역") ? null : prev));
-      setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, err => {
-      secureLog.error('logs snapshot error:', err);
-      if (err.code === 'permission-denied') {
-        showStatus("운행 내역을 가져오는 데 실패했습니다. 권한 설정을 확인해 주세요.", "error");
-      }
-    });
-
-    return () => unsubscribeLogs();
-  }, [user?.uid, profile?.role, profile?.status, profile?.department]);
+  }, [user?.uid, profile?.role, profile?.status, profile?.userName]);
 
   // [UI/SEC] 보안을 위해 클라이언트 측에서도 권한에 따른 필터링을 이중으로 수행
   const authorizedLogs = useMemo(() => {
@@ -1189,7 +1256,16 @@ const App = () => {
 
             <div className="flex-1 px-4 py-4 lg:px-10 lg:py-0 lg:pb-10 max-w-7xl w-full mx-auto pb-24">
               <main className="max-w-7xl">
-                {view === 'dashboard' && <Dashboard logs={logs} profile={profile} users={allUsers} orgUnits={orgUnits} />}
+                {view === 'dashboard' && (
+                  <Dashboard 
+                    logs={logs} 
+                    profile={profile} 
+                    users={allUsers} 
+                    orgUnits={orgUnits} 
+                    onSearch={handleSearchLogs}
+                    isSearching={isSearching}
+                  />
+                )}
                 {view === 'log' && <LogEntryForm key={editingLog?.id || 'new'} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} corVehicles={corVehicles} />}
                 {view === 'history' && (
                   <HistoryTable 
@@ -1197,15 +1273,30 @@ const App = () => {
                     onDelete={deleteLog} 
                     isAdmin={isAdmin} 
                     onRequestCorrection={requestCorrection} 
-                    onUpdateLog={saveLog} 
+                    onEdit={(log) => { setEditingLog(log); setView('log'); }} 
                     profile={profile} 
                     filters={historyFilters}
                     onFilterChange={setHistoryFilters}
-                    onEdit={(log) => { setEditingLog(log); setView('log'); }} 
                     allUsers={allUsers}
+                    onSearch={handleSearchLogs}
+                    isSearching={isSearching}
                   />
                 )}
-                {view === 'reports' && <ManagementReport logs={authorizedLogs} users={allUsers} db={db} appId={appId} filters={reportFilters} onFilterChange={setReportFilters} orgUnits={orgUnits} corVehicles={corVehicles} profile={profile} />}
+                {view === 'reports' && (
+                  <ManagementReport 
+                    logs={authorizedLogs} 
+                    users={allUsers} 
+                    db={db} 
+                    appId={appId} 
+                    filters={reportFilters} 
+                    onFilterChange={setReportFilters} 
+                    orgUnits={orgUnits} 
+                    corVehicles={corVehicles} 
+                    profile={profile} 
+                    onSearch={handleSearchLogs}
+                    isSearching={isSearching}
+                  />
+                )}
                 {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={authorizedLogs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} onExport={handleNativeExport} onImport={handleNativeImport} notificationSettings={notificationSettings} showStatus={showStatus} />}
                 {view === 'orgchart' && <OrgChartView orgUnits={orgUnits} users={allUsers} db={db} appId={appId} setOrgUnits={setOrgUnits} />}
                 {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} showStatus={showStatus} onLogout={logout} />}
@@ -1275,10 +1366,27 @@ const NavItem = ({ icon, label, active, onClick, isCollapsed, disabled, badge })
   </button>
 );
 
-const Dashboard = ({ logs, profile, users, orgUnits }) => {
+const Dashboard = ({ logs, profile, users, orgUnits, onSearch, isSearching }) => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [selectedUserId, setSelectedUserId] = useState('all');
-  const [selectedDept, setSelectedDept] = useState('all');
+  const [selectedUserId, setSelectedUserId] = useState(profile?.uid || 'all');
+  const [selectedDept, setSelectedDept] = useState(profile?.department || 'all');
+
+  // [OPT] 프로필 정보가 로드되면 대시보드 필터 초기값 동기화
+  useEffect(() => {
+    if (profile && selectedUserId === 'all' && selectedDept === 'all') {
+      setSelectedUserId(profile.uid);
+      setSelectedDept(profile.department);
+    }
+  }, [profile]);
+
+  // [OPT] 대시보드 전용 조회 핸들러
+  const handleDashboardSearch = () => {
+    onSearch({
+      selectedMonth,
+      selectedDept,
+      selectedMember: selectedUserId === 'all' ? 'all' : (users.find(u => u.uid === selectedUserId)?.userName || 'all')
+    });
+  };
 
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
@@ -1386,6 +1494,20 @@ const Dashboard = ({ logs, profile, users, orgUnits }) => {
               onChange={(e) => setSelectedMonth(e.target.value)}
             />
           </div>
+
+          {/* 조회 버튼 추가 */}
+          <button
+            onClick={handleDashboardSearch}
+            disabled={isSearching}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl font-black text-sm transition-all shadow-sm active:scale-95 ${
+              isSearching 
+              ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
+              : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100'
+            }`}
+          >
+            {isSearching ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />}
+            {isSearching ? '조회 중...' : '조회'}
+          </button>
         </div>
       </div>
 
@@ -2193,7 +2315,7 @@ const InputGroup = ({ label, icon, children }) => (
   </div>
 );
 
-const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, profile, filters, onFilterChange, allUsers }) => {
+const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, profile, filters, onFilterChange, allUsers, onSearch, isSearching }) => {
   const [requestModal, setRequestModal] = useState({ show: false, logId: null, type: 'delete' });
   const [reason, setReason] = useState('');
   
@@ -2330,6 +2452,10 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, pr
                   onChange={(e) => setSelectedDept(e.target.value)}
                 >
                   <option value="all">부서 전체</option>
+                  {/* 선택된 부서가 목록에 없더라도 옵션에 추가하여 선택 상태 유지 */}
+                  {selectedDept !== 'all' && !availableDepts.includes(selectedDept) && (
+                    <option value={selectedDept}>{selectedDept.split(' > ').pop()}</option>
+                  )}
                   {availableDepts.map(dept => (
                     <option key={dept} value={dept}>{dept.split(' > ').pop()}</option>
                   ))}
@@ -2346,6 +2472,10 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, pr
                   onChange={(e) => setSelectedMember(e.target.value)}
                 >
                   <option value="all">사용자 전체</option>
+                  {/* 선택된 사용자가 목록에 없더라도 옵션에 추가하여 선택 상태 유지 */}
+                  {selectedMember !== 'all' && !availableMembers.includes(selectedMember) && (
+                    <option value={selectedMember}>{selectedMember}</option>
+                  )}
                   {availableMembers.map(member => (
                     <option key={member} value={member}>{member}</option>
                   ))}
@@ -2369,6 +2499,20 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, pr
               </button>
             )}
           </div>
+
+          {/* 조회 버튼 추가 */}
+          <button
+            onClick={() => onSearch()}
+            disabled={isSearching}
+            className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-sm transition-all shadow-sm active:scale-95 ${
+              isSearching 
+              ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
+              : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100'
+            }`}
+          >
+            {isSearching ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />}
+            {isSearching ? '조회 중...' : '조회'}
+          </button>
         </div>
 
         {/* Row 2: 통계 카드 */}
@@ -4387,7 +4531,7 @@ const OrgChartView = ({ orgUnits, users, db, appId, setOrgUnits, onUpdateUser })
   );
 };
 
-const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, corVehicles, profile }) => {
+const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, corVehicles, profile, onSearch, isSearching }) => {
   const [activeTab, setActiveTab] = useState('summary'); // 'summary', 'details', or 'official'
   const officialReportRef = useRef(null);
   const [selectedCarForReport, setSelectedCarForReport] = useState(null);
@@ -4544,20 +4688,40 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, cor
           </div>
           <div className="space-y-3">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">상세 기간 및 범위</label>
-            <div className="flex gap-2 items-center">
-              <input 
-                type="date" 
-                className="flex-1 px-4 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 text-[11px] outline-none focus:ring-4 focus:ring-indigo-50 focus:bg-white transition-all"
-                value={filters.startDate}
-                onChange={e => onFilterChange({...filters, startDate: e.target.value})}
-              />
-              <span className="text-slate-300 font-black">~</span>
-              <input 
-                type="date" 
-                className="flex-1 px-4 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 text-[11px] outline-none focus:ring-4 focus:ring-indigo-50 focus:bg-white transition-all"
-                value={filters.endDate}
-                onChange={e => onFilterChange({...filters, endDate: e.target.value})}
-              />
+            <div className="flex gap-4 items-end">
+              <div className="flex gap-2 items-center flex-1">
+                <input 
+                  type="date" 
+                  className="flex-1 px-4 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 text-[11px] outline-none focus:ring-4 focus:ring-indigo-50 focus:bg-white transition-all"
+                  value={filters.startDate}
+                  onChange={e => onFilterChange({...filters, startDate: e.target.value})}
+                />
+                <span className="text-slate-300 font-black">~</span>
+                <input 
+                  type="date" 
+                  className="flex-1 px-4 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 font-black text-slate-700 text-[11px] outline-none focus:ring-4 focus:ring-indigo-50 focus:bg-white transition-all"
+                  value={filters.endDate}
+                  onChange={e => onFilterChange({...filters, endDate: e.target.value})}
+                />
+              </div>
+
+              {/* 조회 버튼 추가 */}
+              <button
+                onClick={() => onSearch({
+                  selectedMonth: filters.selectedMonth,
+                  selectedDept: filters.department,
+                  selectedMember: filters.userId === 'all' ? 'all' : (users.find(u => u.uid === filters.userId)?.userName || 'all')
+                })}
+                disabled={isSearching}
+                className={`flex items-center gap-2 px-8 py-4.5 rounded-2xl font-black text-sm transition-all shadow-sm active:scale-95 ${
+                  isSearching 
+                  ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
+                  : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100'
+                }`}
+              >
+                {isSearching ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />}
+                {isSearching ? '조회 중...' : '조회'}
+              </button>
             </div>
           </div>
         </div>
