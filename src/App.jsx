@@ -145,10 +145,10 @@ const sanitizeString = (str, maxLength = 200) => {
   return str.replace(/<[^>]*>/g, '').replace(/[<>"'`]/g, '').trim().slice(0, maxLength);
 };
 
-// [UI] DiceBear 기반의 사용자별 고유 캐릭터 아바타 URL 생성
+// [UI] Multiavatar 기반의 사용자별 고유 캐릭터 아바타 URL 생성
 const getAvatarUrl = (email) => {
   const seed = encodeURIComponent(email || 'default');
-  return `https://api.dicebear.com/7.x/open-peeps/svg?seed=${seed}&scale=90`;
+  return `https://api.multiavatar.com/${seed}.svg`;
 };
 
 const isValidDate = (dateStr) => {
@@ -1219,7 +1219,7 @@ const App = () => {
                 )}
                 <button
                   onClick={() => setView('profile')}
-                  className="relative w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center text-white font-black text-sm shadow-md overflow-hidden"
+                  className="relative w-9 h-9 rounded-xl bg-[#f0f2f5] flex items-center justify-center text-white font-black text-sm shadow-md overflow-hidden p-[5px]"
                 >
                   <img src={getAvatarUrl(user?.email)} alt="User Avatar" className="w-full h-full object-cover rounded-xl" />
                   <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
@@ -3125,7 +3125,7 @@ const MyPage = ({ profile, onUpdate, showStatus, onLogout }) => {
   return (
     <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 max-w-4xl mx-auto animate-fade-in">
       <div className="mb-6 flex items-center gap-5">
-        <div className="w-14 h-14 bg-[#1A1A1A] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-200 shrink-0 overflow-hidden">
+        <div className="w-14 h-14 bg-[#f0f2f5] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-200 shrink-0 overflow-hidden p-[5px]">
           <img src={getAvatarUrl(profile?.email)} alt="Profile Avatar" className="w-full h-full object-cover rounded-2xl" />
         </div>
         <div>
@@ -3397,7 +3397,7 @@ const MobileMenuSheet = ({ isOpen, onClose, currentView, onNavigate, onLogout, i
         </div>
         
         <div className="mb-6 flex items-center gap-4 bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50">
-          <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-md overflow-hidden">
+          <div className="w-12 h-12 bg-[#f0f2f5] rounded-xl flex items-center justify-center text-white font-black text-lg shadow-md overflow-hidden p-[5px]">
             <img src={getAvatarUrl(userProfile?.email)} alt="User Avatar" className="w-full h-full object-cover rounded-xl" />
           </div>
           <div>
@@ -3471,7 +3471,7 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
         <div className={`transition-all duration-500 ${isCollapsed ? 'mb-6' : 'mb-8 px-1'}`}>
           {isCollapsed ? (
             <div className="flex justify-center">
-              <div className="relative w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-white font-black text-sm shadow-lg cursor-pointer overflow-hidden" onClick={() => onNavigate('profile')}>
+              <div className="relative w-10 h-10 rounded-2xl bg-[#f0f2f5] flex items-center justify-center text-white font-black text-sm shadow-lg cursor-pointer overflow-hidden p-[5px]" onClick={() => onNavigate('profile')}>
                 <img src={getAvatarUrl(userProfile?.email)} alt="User Avatar" className="w-full h-full object-cover rounded-2xl" />
                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>
               </div>
@@ -3479,7 +3479,7 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
           ) : (
             <div className="relative p-4 rounded-[1.8rem] bg-indigo-50/30 border border-indigo-100/50 animate-fade-in overflow-hidden">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-white font-black text-sm shadow-xl shadow-indigo-100 overflow-hidden">
+                <div className="w-10 h-10 rounded-2xl bg-[#f0f2f5] flex items-center justify-center text-white font-black text-sm shadow-xl shadow-indigo-100 overflow-hidden p-[5px]">
                   <img src={getAvatarUrl(userProfile?.email)} alt="User Avatar" className="w-full h-full object-cover rounded-2xl" />
                 </div>
                 <div className="flex-1 min-w-0">
