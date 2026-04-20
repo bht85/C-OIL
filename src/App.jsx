@@ -3123,19 +3123,25 @@ const MyPage = ({ profile, onUpdate, showStatus, onLogout }) => {
   };
 
   return (
-    <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 max-w-4xl mx-auto animate-fade-in">
-      <div className="mb-6 flex items-center gap-5">
-        <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-200 shrink-0 overflow-hidden p-[3px]">
-          <img src={getAvatarUrl(profile?.email)} alt="Profile Avatar" className="w-full h-full object-contain rounded-2xl" />
+    <div className="bg-white p-6 sm:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 max-w-4xl mx-auto animate-fade-in mb-20">
+      <div className="mb-12 flex flex-col items-center text-center">
+        <div className="w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center text-white shadow-xl shadow-slate-100 shrink-0 overflow-hidden p-1.5 mb-5 relative group transition-all duration-500 hover:scale-105">
+          <img src={getAvatarUrl(profile?.email)} alt="Profile Avatar" className="w-full h-full object-contain rounded-[1.8rem]" />
+          <div className="absolute inset-0 border-4 border-white/50 rounded-[2rem] pointer-events-none"></div>
         </div>
-        <div>
-          <h3 className="text-2xl font-black text-slate-800 tracking-tight">{profile?.userName} 님</h3>
-          <div className="flex items-center gap-2.5 mt-1.5">
-            <span className="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md uppercase tracking-widest">{profile?.department || '부서 미지정'}</span>
-            <span className="text-[12px] font-bold text-slate-400">{profile?.email}</span>
+        <div className="space-y-3">
+          <h3 className="text-3xl font-black text-slate-800 tracking-tight">{profile?.userName} 님</h3>
+          <div className="flex flex-col items-center gap-2">
+            <span className="text-[14px] font-bold text-slate-400">{profile?.email}</span>
+            <div className="flex items-center gap-2">
+              <span className="h-px w-4 bg-indigo-100"></span>
+              <span className="text-[12px] font-black text-indigo-600 bg-indigo-50/50 px-3 py-1 rounded-full uppercase tracking-wider border border-indigo-100/50">
+                {profile?.department || '부서 미지정'}
+              </span>
+              <span className="h-px w-4 bg-indigo-100"></span>
+            </div>
           </div>
         </div>
-        {/* 로그아웃 버튼 제거 (사이드바 메뉴와 중복) */}
       </div>
 
       <div className="space-y-5">
