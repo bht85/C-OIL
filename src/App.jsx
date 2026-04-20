@@ -1731,11 +1731,13 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
   // key prop 덕분에 component가 mount될 때 이 초기값이 사용됩니다.
   const [formData, setFormData] = useState(getInitialFormData());
 
+  const assignedVehicle = useMemo(() => 
+    corVehicles?.find(v => v.assignedUser === profile?.uid),
+    [corVehicles, profile?.uid]
+  );
+
   // 유종 변경 반영 (프로필 설정 변경 시 실시간 반영)
   useEffect(() => {
-    // 1. 법인 차량 배정 여부 확인
-    const assignedVehicle = corVehicles?.find(v => v.assignedUser === profile?.uid);
-    
     if (!initialData) {
       // 신규 작성 시: 법인차량 유종 우선, 없으면 프로필 유종 사용
       const targetFuelType = assignedVehicle ? assignedVehicle.fuelType : profile?.fuelType;
