@@ -1749,7 +1749,7 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
         setFormData(prev => ({ ...prev, fuelType: profile.fuelType }));
       }
     }
-  }, [profile?.fuelType, corVehicles, initialData]);
+  }, [profile?.fuelType, profile?.uid, corVehicles, initialData]);
 
   // Haversine 거리 계산 함수
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -2014,16 +2014,32 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
 
             <InputGroup label="사용 유종" icon={<Fuel size={16}/>}>
               <div className="relative group">
-                <div className="w-full px-4 py-3.5 rounded-xl bg-slate-100/60 border border-slate-200 font-bold text-slate-600 flex items-center justify-between shadow-inner">
+                <div className={`w-full px-4 py-3.5 rounded-xl border font-bold flex items-center justify-between transition-all duration-500 ${
+                  assignedVehicle 
+                  ? 'bg-slate-100/80 border-slate-200 text-slate-600 shadow-inner' 
+                  : 'bg-indigo-50/30 border-indigo-100 text-slate-700'
+                }`}>
                   <span className="flex items-center gap-2 text-sm">
-                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                    <span className={`w-2 h-2 rounded-full ${assignedVehicle ? 'bg-slate-400' : 'bg-indigo-500 animate-pulse'}`}></span>
                     {formData.fuelType === 'gasoline' ? '휘발유' : formData.fuelType === 'diesel' ? '경유' : 'LPG'} 
                     <span className="text-indigo-500 text-xs">({Number(fuelRates?.[formData.fuelType]?.unitPrice || 0).toFixed(1)}원/km)</span>
                   </span>
-                  <Lock size={14} className="text-slate-300" />
+                  {assignedVehicle ? (
+                    <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-sm">
+                      <Lock size={12} className="text-slate-400" />
+                      <span className="text-[9px] text-slate-400">법인차량 설정</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 bg-indigo-500 px-2 py-1 rounded-lg shadow-sm">
+                      <Check size={12} className="text-white" />
+                      <span className="text-[9px] text-white">프로필 동기화</span>
+                    </div>
+                  )}
                 </div>
                 <p className="mt-2 px-1 text-[10px] font-black text-slate-400 italic">
-                  ※ 유종 변경은 <span className="text-indigo-500 underline underline-offset-2">'내 정보'</span> 메뉴에서 가능합니다.
+                  {assignedVehicle 
+                    ? `※ 배정된 법인차량([${assignedVehicle.vehicleName}])의 유종 (${assignedVehicle.fuelType === 'gasoline' ? '휘발유' : assignedVehicle.fuelType === 'diesel' ? '경유' : 'LPG'})이 강제 적용됩니다.`
+                    : `※ 유종 변경은 '내 정보' 메뉴에서 가능하며, 현재 프로필 설정값이 실시간 반영됩니다.`}
                 </p>
               </div>
             </InputGroup>
