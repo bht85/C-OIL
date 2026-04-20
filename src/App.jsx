@@ -1304,7 +1304,7 @@ const App = () => {
                   />
                 )}
                 {view === 'admin' && <AdminPanel db={db} appId={appId} orgUnits={orgUnits} setOrgUnits={setOrgUnits} logs={authorizedLogs} onApproveRequest={approveRequest} onRejectRequest={rejectRequest} fuelRates={fuelRates} onUpdateSettings={updateSettings} corVehicles={corVehicles} onExport={handleNativeExport} onImport={handleNativeImport} notificationSettings={notificationSettings} showStatus={showStatus} />}
-                {view === 'orgchart' && <OrgChartView orgUnits={orgUnits} users={allUsers} db={db} appId={appId} setOrgUnits={setOrgUnits} />}
+                {view === 'orgchart' && isAdmin && <OrgChartView orgUnits={orgUnits} users={allUsers} db={db} appId={appId} setOrgUnits={setOrgUnits} />}
                 {view === 'profile' && <MyPage profile={profile} onUpdate={updateProfile} showStatus={showStatus} onLogout={logout} />}
               </main>
             </div>
@@ -3424,9 +3424,11 @@ const MobileMenuSheet = ({ isOpen, onClose, currentView, onNavigate, onLogout, i
             </button>
           )}
 
-          <button onClick={() => { onNavigate('orgchart'); onClose(); }} className={`w-full flex items-center gap-3 p-4 rounded-2xl ${currentView === 'orgchart' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-700'}`}>
-             <Network size={20} /> <span className="font-bold text-sm">조직도</span>
-          </button>
+          {isAdmin && (
+            <button onClick={() => { onNavigate('orgchart'); onClose(); }} className={`w-full flex items-center gap-3 p-4 rounded-2xl ${currentView === 'orgchart' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-700'}`}>
+               <Network size={20} /> <span className="font-bold text-sm">조직도</span>
+            </button>
+          )}
         </div>
 
         <button onClick={() => { onClose(); onLogout(); }} className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-red-50 text-red-500 font-bold active:scale-95 transition-all">
