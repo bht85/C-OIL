@@ -1242,14 +1242,14 @@ const App = () => {
                     <div className="flex items-center gap-2">
                       <button 
                         onClick={exportPDF}
-                        className="flex items-center gap-2 bg-indigo-600 px-5 py-3 rounded-2xl text-white font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                        className="flex items-center justify-center gap-2 bg-indigo-600 px-5 py-3 rounded-2xl text-white font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 min-w-[160px]"
                       >
                         <FileText size={18} /> 
                         <span className="text-sm">PDF 리포트 출력</span>
                       </button>
                       <button 
                         onClick={handleExportData}
-                        className="flex items-center gap-2 bg-white px-5 py-3 rounded-2xl border border-slate-100 text-slate-600 font-bold shadow-sm hover:shadow-md hover:border-indigo-100 transition-all active:scale-95"
+                        className="flex items-center justify-center gap-2 bg-white px-5 py-3 rounded-2xl border border-slate-100 text-slate-600 font-bold shadow-sm hover:shadow-md hover:border-indigo-100 transition-all active:scale-95 min-w-[160px]"
                       >
                         <Download size={18} className="text-indigo-500" /> 
                         <span className="text-sm">CSV 데이터 내보내기</span>
@@ -1505,7 +1505,7 @@ const Dashboard = ({ logs, profile, users, orgUnits, onSearch, isSearching }) =>
           <button
             onClick={handleDashboardSearch}
             disabled={isSearching}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl font-black text-sm transition-all shadow-sm active:scale-95 ${
+            className={`flex items-center justify-center gap-2 px-6 py-2.5 rounded-2xl font-black text-sm transition-all shadow-sm active:scale-95 min-w-[160px] ${
               isSearching 
               ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
               : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100'
@@ -2523,7 +2523,7 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, pr
           <button
             onClick={() => onSearch()}
             disabled={isSearching}
-            className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-sm transition-all shadow-sm active:scale-95 ${
+            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black text-sm transition-all shadow-sm active:scale-95 min-w-[160px] ${
               isSearching 
               ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
               : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100'
