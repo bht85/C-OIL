@@ -2006,17 +2006,19 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
             </InputGroup>
 
             <InputGroup label="사용 유종" icon={<Fuel size={16}/>}>
-              <div className="relative group">
-                <div className="w-full px-4 py-3.5 rounded-xl bg-slate-100/60 border border-slate-200 font-bold text-slate-600 flex items-center justify-between shadow-inner">
-                  <span className="flex items-center gap-2 text-sm">
-                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
-                    {formData.fuelType === 'gasoline' ? '휘발유' : formData.fuelType === 'diesel' ? '경유' : 'LPG'} 
-                    <span className="text-indigo-500 text-xs">({Number(fuelRates?.[formData.fuelType]?.unitPrice || 0).toFixed(1)}원/km)</span>
-                  </span>
+              <div className="relative">
+                <select 
+                  className="w-full px-4 py-3.5 rounded-xl bg-slate-50 border border-slate-100 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-400 outline-none transition-all font-bold text-slate-700 text-base appearance-none cursor-pointer"
+                  value={formData.fuelType}
+                  onChange={e => setFormData({...formData, fuelType: e.target.value})}
+                >
+                  <option value="gasoline">휘발유 (Gasoline) - {Number(fuelRates?.gasoline?.unitPrice || 0).toFixed(1)}원/km</option>
+                  <option value="diesel">경유 (Diesel) - {Number(fuelRates?.diesel?.unitPrice || 0).toFixed(1)}원/km</option>
+                  <option value="lpg">액화석유가스 (LPG) - {Number(fuelRates?.lpg?.unitPrice || 0).toFixed(1)}원/km</option>
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                  <ChevronDown size={18} />
                 </div>
-                <p className="mt-2 px-1 text-[10px] font-black text-slate-400 italic">
-                  ※ 유종 변경은 <span className="text-indigo-500 underline underline-offset-2">'내 정보'</span> 메뉴에서 가능합니다.
-                </p>
               </div>
             </InputGroup>
           </div>
