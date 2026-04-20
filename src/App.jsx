@@ -449,29 +449,24 @@ const App = () => {
           const userDoc = await getDoc(userDocRef);
           
           if (userDoc.exists()) {
-            const existingProfile = userDoc.data();
-            if (existingProfile.status === 'disabled') {
-              showStatus("인사 처리에 의해 비활성화된 계정입니다. (퇴직 등)", "error");
-              await signOut(auth);
-              setUser(null);
-              setProfile(null);
-              setLoading(false);
-              return;
-            }
-            setProfile(existingProfile);
-            // 기존 사용자인데 차량/유종 미입력 시 내 정보 화면으로 이동
-            if (!existingProfile.vehicleName || !existingProfile.fuelType) {
-              setIsNewUser(true);
-            }
+            // Real-time sync for profile
+            onSnapshot(userDocRef, (docSnap) => {
+              if (docSnap.exists()) {
+                const refreshedProfile = { uid: u.uid, ...docSnap.data() };
+                setProfile(refreshedProfile);
+                if (!refreshedProfile.vehicleName || !refreshedProfile.fuelType) {
+                  setIsNewUser(true);
+                }
+              }
+            });
           } else {
             const isMaster = isMasterAdmin(u.email);
-
             const newProfile = {
               uid: u.uid,
               email: u.email,
               userName: u.displayName || '신규 사용자',
               role: isMaster ? 'admin' : 'staff',
-              status: 'approved', // 자동 승인 신청 시스템으로 변경
+              status: 'approved',
               department: isMaster ? '(주)컴포즈커피 > 경영지원본부 > 인사총무팀' : '미지정',
               vehicleName: '',
               fuelType: '',
@@ -481,7 +476,7 @@ const App = () => {
             };
             await setDoc(userDocRef, newProfile);
             setProfile(newProfile);
-            setIsNewUser(true); // 신규 사용자 → 내 정보 화면으로 이동 트리거
+            setIsNewUser(true);
           }
         } else {
           setUser(null);
@@ -3303,18 +3298,23 @@ const MyPage = ({ profile, onUpdate, showStatus, onLogout }) => {
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                   기본 유종 <span className="text-red-500 ml-0.5">*</span>
                 </label>
-                <select 
-                   className={`w-full px-4 py-3 rounded-xl bg-white border-2 focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700 text-sm appearance-none ${
-                     !localProfile.fuelType ? 'border-red-200 focus:border-red-400' : 'border-slate-100 focus:border-indigo-400'
-                   }`}
-                   value={localProfile.fuelType}
-                   onChange={(e) => setLocalProfile({...localProfile, fuelType: e.target.value})}
-                >
-                   <option value="">유종 선택 (필수)</option>
-                   <option value="gasoline">휘발유 (Gasoline)</option>
-                   <option value="diesel">경유 (Diesel)</option>
-                   <option value="lpg">액화석유가스 (LPG)</option>
-                </select>
+                 <div className="relative">
+                   <select 
+                      className={`w-full px-4 py-3 rounded-xl bg-white border-2 focus:ring-4 focus:ring-indigo-100/50 outline-none transition-all font-bold text-slate-700 text-sm appearance-none ${
+                        !localProfile.fuelType ? 'border-red-200 focus:border-red-400' : 'border-slate-100 focus:border-indigo-400'
+                      }`}
+                      value={localProfile.fuelType}
+                      onChange={(e) => setLocalProfile({...localProfile, fuelType: e.target.value})}
+                   >
+                      <option value="">유종 선택 (필수)</option>
+                      <option value="gasoline">휘발유 (Gasoline)</option>
+                      <option value="diesel">경유 (Diesel)</option>
+                      <option value="lpg">액화석유가스 (LPG)</option>
+                   </select>
+                   <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">
+                     <ChevronDown size={16} />
+                   </div>
+                 </div>
                 {!localProfile.fuelType && (
                   <p className="text-[10px] font-black text-red-400 ml-1">유종을 선택해 주세요</p>
                 )}
