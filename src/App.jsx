@@ -3338,7 +3338,7 @@ const MyPage = ({ profile, onUpdate, showStatus, onLogout }) => {
 const MobileBottomNav = ({ currentView, onNavigate, onMenuToggle, pendingCount, disabled }) => {
   const tabs = [
     { id: 'dashboard', icon: <LayoutDashboard size={20} />, label: '대시보드' },
-    { id: 'log', icon: <PlusCircle size={24} className="text-white" />, label: '신규등록', isAction: true },
+    { id: 'log', icon: <PlusCircle size={24} className="text-white" />, label: '신규 운행', isAction: true },
     { id: 'history', icon: <History size={20} />, label: '정산내역' },
     { id: 'menu', icon: <Menu size={20} />, label: '전체메뉴', isMenu: true }
   ];
@@ -3358,9 +3358,14 @@ const MobileBottomNav = ({ currentView, onNavigate, onMenuToggle, pendingCount, 
             }`}
           >
             {tab.isAction ? (
-              <div className="bg-indigo-600 w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-indigo-200 -mt-5 border-4 border-white">
-                {tab.icon}
-              </div>
+              <>
+                <div className="bg-indigo-600 w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-indigo-200 -mt-5 border-4 border-white">
+                  {tab.icon}
+                </div>
+                <span className={`text-[9.5px] font-black tracking-tight ${currentView === tab.id ? 'text-indigo-600' : 'text-slate-400'}`}>
+                  {tab.label}
+                </span>
+              </>
             ) : (
               <>
                 <div className={`relative ${currentView === tab.id ? 'text-indigo-600' : 'text-slate-400'}`}>
