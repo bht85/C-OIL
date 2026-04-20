@@ -1229,7 +1229,7 @@ const App = () => {
 
             {/* Desktop Header */}
             <div className="hidden lg:block p-10 pb-0">
-              <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10 animate-fade-in">
+              <header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10 animate-fade-in">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="h-px w-8 bg-indigo-500 rounded-full"></span>
