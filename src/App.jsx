@@ -1267,7 +1267,7 @@ const App = () => {
                     isSearching={isSearching}
                   />
                 )}
-                {view === 'log' && <LogEntryForm key={editingLog?.id || 'new'} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} corVehicles={corVehicles} />}
+                {view === 'log' && <LogEntryForm key={`${editingLog?.id || 'new'}-${profile?.fuelType}`} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} corVehicles={corVehicles} />}
                 {view === 'history' && (
                   <HistoryTable 
                     logs={authorizedLogs} 
