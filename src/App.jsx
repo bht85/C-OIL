@@ -79,6 +79,7 @@ const ComposeLogo = ({ size = 24, className = "" }) => (
     <circle cx="50" cy="50" r="8" fill="#1A1A1A" />
   </svg>
 );
+import CommuteTracker from './CommuteTracker';
 import { 
   BarChart, 
   Bar, 
@@ -1140,7 +1141,7 @@ const App = () => {
   };
 
   const isAdmin = profile?.role === 'admin' || isMasterAdmin(user?.email); 
-  const viewTitle = view === 'dashboard' ? '대시보드' : view === 'log' ? (editingLog ? '운행 수정' : '신규 운행') : view === 'history' ? '정산 내역' : view === 'reports' ? '통계 리포트' : view === 'admin' ? '인사 관리' : view === 'orgchart' ? '조직도' : '내 프로필';
+  const viewTitle = view === 'dashboard' ? '대시보드' : view === 'log' ? (editingLog ? '운행 수정' : '신규 운행') : view === 'history' ? '정산 내역' : view === 'commute' ? '동선 관리' : view === 'reports' ? '통계 리포트' : view === 'admin' ? '인사 관리' : view === 'orgchart' ? '조직도' : '내 프로필';
 
   return (
     <>
@@ -1268,6 +1269,7 @@ const App = () => {
                   />
                 )}
                 {view === 'log' && <LogEntryForm key={`${editingLog?.id || 'new'}-${profile?.fuelType}`} fuelRates={fuelRates} profile={profile} onSave={saveLog} initialData={editingLog} isAdmin={isAdmin} db={db} appId={appId} corVehicles={corVehicles} />}
+                {view === 'commute' && <CommuteTracker profile={profile} db={db} appId={appId} />}
                 {view === 'history' && (
                   <HistoryTable 
                     logs={authorizedLogs} 
@@ -3534,6 +3536,9 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
           <NavItem isCollapsed={isCollapsed} icon={<PlusCircle />} label="신규 운행" active={currentView === 'log'} onClick={() => { onNavigate('log'); setEditingLog(null); }} disabled={profileIncomplete} />
           <NavItem isCollapsed={isCollapsed} icon={<History />} label="정산 내역" active={currentView === 'history'} onClick={() => { onNavigate('history'); setEditingLog(null); }} disabled={profileIncomplete} />
           {isAdmin && (
+            <NavItem isCollapsed={isCollapsed} icon={<Navigation />} label="동선 관리" active={currentView === 'commute'} onClick={() => { onNavigate('commute'); setEditingLog(null); }} disabled={profileIncomplete} />
+          )}
+          {isAdmin && (
             <>
               <div className={`h-px bg-slate-100 my-2 ${isCollapsed ? 'mx-2' : 'mx-4'}`}></div>
               <NavItem isCollapsed={isCollapsed} icon={<FileText />} label="운행 통계" active={currentView === 'reports'} onClick={() => onNavigate('reports')} disabled={profileIncomplete} />
@@ -3581,19 +3586,14 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
             disabled={profileIncomplete}
             onClick={() => { onNavigate('dashboard'); setEditingLog(null); }}
           />
-          {/* 신규 운행 - 강조 버튼 */}
-          <div className="flex-1 flex items-center justify-center relative">
-            <button
-              disabled={profileIncomplete}
-              onClick={() => { onNavigate('log'); setEditingLog(null); }}
-              className={`absolute -top-5 w-14 h-14 rounded-2xl flex flex-col items-center justify-center shadow-xl transition-all active:scale-95 ${
-                profileIncomplete ? 'bg-slate-200 cursor-not-allowed' :
-                currentView === 'log' ? 'bg-indigo-700 shadow-indigo-300' : 'bg-indigo-600 shadow-indigo-200'
-              }`}
-            >
-              <PlusCircle size={26} className="text-white" />
-            </button>
-          </div>
+          {/* 신규 운행 */}
+          <MobileNavItem
+            icon={<PlusCircle size={22} />}
+            label="신규 운행"
+            active={currentView === 'log'}
+            disabled={profileIncomplete}
+            onClick={() => { onNavigate('log'); setEditingLog(null); }}
+          />
           {/* 정산 내역 */}
           <MobileNavItem
             icon={<History size={22} />}
@@ -3602,6 +3602,16 @@ const Sidebar = ({ currentView, onNavigate, onLogout, isAdmin, userProfile, isCo
             disabled={profileIncomplete}
             onClick={() => { onNavigate('history'); setEditingLog(null); }}
           />
+          {/* 동선 관리 */}
+          {isAdmin && (
+            <MobileNavItem
+              icon={<Navigation size={22} />}
+              label="동선 관리"
+              active={currentView === 'commute'}
+              disabled={profileIncomplete}
+              onClick={() => { onNavigate('commute'); setEditingLog(null); }}
+            />
+          )}
           {/* 내 정보 */}
           <MobileNavItem
             icon={<UserCircle size={22} />}
