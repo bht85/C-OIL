@@ -2914,12 +2914,13 @@ const SettingsPanel = ({ fuelRates, onUpdate, db, appId }) => {
   const handleChange = (fuel, field, value) => {
     const numValue = Number(value);
     if (field === 'avgPrice') {
+      const multiplier = fuel === 'lpg' ? 0.1 : 0.125;
       setLocalRates({
         ...localRates,
         [fuel]: {
           ...localRates[fuel],
           avgPrice: numValue,
-          unitPrice: Number((numValue * 0.125).toFixed(2))
+          unitPrice: Number((numValue * multiplier).toFixed(2))
         }
       });
     } else {
