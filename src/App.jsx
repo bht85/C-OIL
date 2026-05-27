@@ -2912,10 +2912,22 @@ const SettingsPanel = ({ fuelRates, onUpdate, db, appId }) => {
   }, [selectedMonth, db, appId, fuelRates]);
 
   const handleChange = (fuel, field, value) => {
-    setLocalRates({
-      ...localRates,
-      [fuel]: { ...localRates[fuel], [field]: Number(value) }
-    });
+    const numValue = Number(value);
+    if (field === 'avgPrice') {
+      setLocalRates({
+        ...localRates,
+        [fuel]: {
+          ...localRates[fuel],
+          avgPrice: numValue,
+          unitPrice: Number((numValue * 0.125).toFixed(2))
+        }
+      });
+    } else {
+      setLocalRates({
+        ...localRates,
+        [fuel]: { ...localRates[fuel], [field]: numValue }
+      });
+    }
   };
 
   return (
@@ -2952,9 +2964,13 @@ const SettingsPanel = ({ fuelRates, onUpdate, db, appId }) => {
               </div>
               <div className="space-y-2.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">평균 판매가 (원/L)</label>
-                <div className="w-full px-5 h-[64px] flex items-center rounded-2xl bg-slate-50 font-black text-slate-700 border-2 border-slate-50 text-sm">
-                  {localRates[fuel]?.avgPrice || 0}
-                </div>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  className="w-full px-5 h-[64px] rounded-2xl border-2 border-slate-100 bg-slate-50 focus:bg-white focus:ring-4 focus:ring-slate-50 focus:border-slate-400 outline-none transition-all font-black text-slate-700 text-sm"
+                  value={localRates[fuel]?.avgPrice || 0}
+                  onChange={e => handleChange(fuel, 'avgPrice', e.target.value)}
+                />
               </div>
               <div className="space-y-2.5">
                 <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest ml-1">{selectedMonth.split('-')[1]}월 KM당 단가</label>
