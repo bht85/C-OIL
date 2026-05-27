@@ -538,12 +538,17 @@ const App = () => {
         showStatus("보안을 위해 10분간 무활동 시 자동 로그아웃되었습니다.", "info");
       }, 10 * 60 * 1000);
     };
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-    events.forEach(e => window.addEventListener(e, resetTimer));
+    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(e => {
+      const options = (e === 'scroll' || e === 'touchstart' || e === 'mousemove') 
+        ? { capture: true, passive: true } 
+        : { capture: true };
+      window.addEventListener(e, resetTimer, options);
+    });
     resetTimer();
     return () => {
       if (timer) clearTimeout(timer);
-      events.forEach(e => window.removeEventListener(e, resetTimer));
+      events.forEach(e => window.removeEventListener(e, resetTimer, true));
     };
   }, [user]);
   
