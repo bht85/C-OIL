@@ -2009,13 +2009,15 @@ const LogEntryForm = ({ fuelRates, profile, onSave, initialData, isAdmin, corVeh
                 value={formData.date}
                 min={(() => {
                   if (isAdmin || initialData) return undefined;
-                  const d = new Date();
-                  d.setDate(d.getDate() - 1);
-                  return d.toISOString().split('T')[0];
+                  const localTime = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000);
+                  const year = localTime.getFullYear();
+                  const month = String(localTime.getMonth() + 1).padStart(2, '0');
+                  return `${year}-${month}-01`;
                 })()}
                 max={(() => {
                   if (isAdmin || initialData) return undefined;
-                  return new Date().toISOString().split('T')[0];
+                  const localTime = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000);
+                  return localTime.toISOString().split('T')[0];
                 })()}
                 onChange={e => setFormData({...formData, date: e.target.value})}
               />
@@ -2439,12 +2441,12 @@ const HistoryTable = ({ logs, onDelete, isAdmin, onRequestCorrection, onEdit, pr
     if (isAdmin) return false; // 관리자는 언제나 수정 가능
     if (log.requestStatus === 'approved') return false; // 승인된 건은 잠금 해제
     
-    // 1. 운행 날짜(date) 기반 마감: 오늘 이전 날짜는 무조건 마감
+    // 1. 운행 날짜(date) 기반 마감: 당월 이전 달의 날짜는 무조건 마감
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const logDate = new Date(log.date);
     logDate.setHours(0, 0, 0, 0);
-    if (logDate < today) return true;
+    if (logDate < currentMonthStart) return true;
 
     // 2. 작성 일시(createdAt) 기반 익일 마감: 작성일 다음날 00시부터 마감
     if (!log.createdAt) return false;
