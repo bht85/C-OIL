@@ -1036,6 +1036,7 @@ const App = () => {
   };
 
   const handleExportData = () => {
+    const showFilters = isAdmin || profile?.role === 'manager';
     let dataToExport = logs;
     let filename = `운행정산내역_${new Date().toLocaleDateString('sv-SE')}.csv`;
 
@@ -1043,8 +1044,8 @@ const App = () => {
       dataToExport = logs.filter(log => {
         const u = allUsers?.find(au => au.uid === log.userId);
         const logDept = log.department || u?.department || '미지정';
-        const matchDept = reportFilters.department === 'all' || logDept === reportFilters.department;
-        const matchUser = reportFilters.userId === 'all' || log.userId === reportFilters.userId;
+        const matchDept = !showFilters || reportFilters.department === 'all' || logDept === reportFilters.department;
+        const matchUser = !showFilters || reportFilters.userId === 'all' || log.userId === reportFilters.userId;
         const matchStart = !reportFilters.startDate || log.date >= reportFilters.startDate;
         const matchEnd = !reportFilters.endDate || log.date <= reportFilters.endDate;
         return matchDept && matchUser && matchStart && matchEnd;
@@ -5089,17 +5090,19 @@ const PasswordResetView = ({ code, onComplete }) => {
 };
 
 const ReportPDFTemplate = ({ innerRef, logs, profile, reportFilters, allUsers }) => {
+  const showFilters = profile?.role === 'admin' || profile?.role === 'manager';
+
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
       const u = allUsers?.find(au => au.uid === log.userId);
       const logDept = log.department || u?.department || '미지정';
-      const matchDept = reportFilters.department === 'all' || logDept.startsWith(reportFilters.department);
-      const matchUser = reportFilters.userId === 'all' || log.userId === reportFilters.userId;
+      const matchDept = !showFilters || reportFilters.department === 'all' || logDept.startsWith(reportFilters.department);
+      const matchUser = !showFilters || reportFilters.userId === 'all' || log.userId === reportFilters.userId;
       const matchStart = !reportFilters.startDate || log.date >= reportFilters.startDate;
       const matchEnd = !reportFilters.endDate || log.date <= reportFilters.endDate;
       return matchDept && matchUser && matchStart && matchEnd;
     }).sort((a, b) => b.date.localeCompare(a.date));
-  }, [logs, allUsers, reportFilters]);
+  }, [logs, allUsers, reportFilters, showFilters]);
 
   const stats = useMemo(() => {
     const totalDist = filteredLogs.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
