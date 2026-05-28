@@ -1041,8 +1041,8 @@ const App = () => {
 
     if (view === 'reports') {
       dataToExport = logs.filter(log => {
-        const u = allUsers.find(au => au.uid === log.userId);
-        const logDept = u?.department || '미지정';
+        const u = allUsers?.find(au => au.uid === log.userId);
+        const logDept = log.department || u?.department || '미지정';
         const matchDept = reportFilters.department === 'all' || logDept === reportFilters.department;
         const matchUser = reportFilters.userId === 'all' || log.userId === reportFilters.userId;
         const matchStart = !reportFilters.startDate || log.date >= reportFilters.startDate;
@@ -1059,11 +1059,11 @@ const App = () => {
 
     const headers = ["날짜", "사용자", "부서", "출발지", "도착지", "운행목적", "거리(km)", "유종", "금액(원)", "경로상세"];
     const rows = dataToExport.map(log => {
-      const userProfile = allUsers.find(u => u.uid === log.userId);
+      const userProfile = allUsers?.find(u => u.uid === log.userId);
       return [
         log.date,
         log.userName,
-        userProfile?.department || '미지정',
+        log.department || userProfile?.department || '미지정',
         log.departure || "",
         log.destination || "",
         log.purpose || "",
@@ -4665,8 +4665,8 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, cor
   const deptStats = useMemo(() => {
     const dStats = {};
     filteredLogs.forEach(log => {
-      const user = users.find(u => u.uid === log.userId);
-      const dept = user?.department || '미지정';
+      const user = users?.find(u => u.uid === log.userId);
+      const dept = log.department || user?.department || '미지정';
       if (!dStats[dept]) {
         dStats[dept] = { dist: 0, fuel: 0, parking: 0, total: 0, count: 0 };
       }
@@ -4865,7 +4865,7 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, cor
                 </tr>
               ) : (
                 filteredLogs.map(log => {
-                  const user = users.find(u => u.uid === log.userId);
+                  const user = users?.find(u => u.uid === log.userId);
                   return (
                     <tr key={log.id} className="hover:bg-slate-50/50 transition-all group">
                       <td className="px-8 py-7 align-top">
@@ -4873,7 +4873,7 @@ const ManagementReport = ({ logs, users, db, appId, filters, onFilterChange, cor
                       </td>
                       <td className="px-8 py-7 align-top">
                         <div className="font-black text-slate-800 text-[13px] group-hover:text-indigo-600 transition-colors">{log.userName}</div>
-                        <div className="text-[10px] font-black text-indigo-500 mt-1 uppercase tracking-tight">{user?.department || '미지정'}</div>
+                        <div className="text-[10px] font-black text-indigo-500 mt-1 uppercase tracking-tight">{log.department || user?.department || '미지정'}</div>
                       </td>
                       <td className="px-8 py-7">
                         <div className="text-[12px] font-bold text-slate-600 leading-relaxed truncate group-hover:text-slate-900 transition-colors">
@@ -5089,8 +5089,8 @@ const PasswordResetView = ({ code, onComplete }) => {
 const ReportPDFTemplate = ({ innerRef, logs, profile, reportFilters, allUsers }) => {
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
-      const u = allUsers.find(au => au.uid === log.userId);
-      const logDept = u?.department || '미지정';
+      const u = allUsers?.find(au => au.uid === log.userId);
+      const logDept = log.department || u?.department || '미지정';
       const matchDept = reportFilters.department === 'all' || logDept.startsWith(reportFilters.department);
       const matchUser = reportFilters.userId === 'all' || log.userId === reportFilters.userId;
       const matchStart = !reportFilters.startDate || log.date >= reportFilters.startDate;
