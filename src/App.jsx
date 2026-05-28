@@ -1396,17 +1396,19 @@ const Dashboard = ({ logs, profile, users, orgUnits, onSearch, isSearching }) =>
     });
   };
 
+  const showFilters = profile?.role === 'admin' || profile?.role === 'manager';
+
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
       // [FIX] 위치 기록 데이터는 통계에서 제외
       if (log.isCommute) return false;
 
       const matchMonth = log.date.startsWith(selectedMonth);
-      const matchUser = selectedUserId === 'all' || log.userId === selectedUserId;
-      const matchDept = selectedDept === 'all' || (log.department && log.department.startsWith(selectedDept));
+      const matchUser = !showFilters || selectedUserId === 'all' || log.userId === selectedUserId;
+      const matchDept = !showFilters || selectedDept === 'all' || (log.department && log.department.startsWith(selectedDept));
       return matchMonth && matchUser && matchDept;
     });
-  }, [logs, selectedMonth, selectedUserId, selectedDept]);
+  }, [logs, selectedMonth, selectedUserId, selectedDept, showFilters]);
 
   const stats = useMemo(() => {
     const totalDist = filteredLogs.reduce((acc, curr) => acc + (Number(curr.distance) || 0), 0);
