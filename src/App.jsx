@@ -535,8 +535,8 @@ const App = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         logout();
-        showStatus("보안을 위해 10분간 무활동 시 자동 로그아웃되었습니다.", "info");
-      }, 10 * 60 * 1000);
+        showStatus("보안을 위해 30분간 무활동 시 자동 로그아웃되었습니다.", "info");
+      }, 30 * 60 * 1000);
     };
     const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
     events.forEach(e => {
